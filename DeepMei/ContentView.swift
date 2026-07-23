@@ -7,8 +7,6 @@
 
 import SwiftUI
 import WebKit
-
-
 struct ContentView: View {
     var body: some View {
         TabView {
@@ -20,11 +18,7 @@ struct ContentView: View {
                         systemImage: "safari.fill"
                     )
                 }
-
-
-
             // MARK: - 文章 / 章程
-
             ArticleListView()
                 .tabItem {
                     Label(
@@ -33,7 +27,6 @@ struct ContentView: View {
                     )
                 }
             // MARK: - 官网
-
             WebView(
                 url: URL(
                     string: "https://szzxshumei.com/"
@@ -65,7 +58,6 @@ struct ContentView: View {
             }
 
         }
-
     }
 }
 
@@ -93,9 +85,6 @@ struct HomeNavigationView: View {
 
 
                 VStack(spacing: 20) {
-
-
-
                     VStack(spacing: 10) {
 
 
@@ -295,11 +284,9 @@ struct HomeNavigationView: View {
                         url:
                             URL(
                                 string:
-                                "https://cqbxhfrnwy.coze.site/"
+                                "https://cqbxhfrnwy.coze.site?t=\(Date().timeIntervalSince1970)"
                             )!
                     )
-
-
                     .navigationTitle(
                         "社员登记"
                     )
@@ -353,52 +340,110 @@ struct HomeNavigationView: View {
 
 // MARK: - Markdown文章列表
 
+struct Article: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let fileName: String
+    let symbol: String
+}
+
+struct ArticleCategory: Identifiable {
+    let id = UUID()
+    let name: String
+    let symbol: String
+    let articles: [Article]
+}
+
 struct ArticleListView: View {
 
+    private let categories: [ArticleCategory] = [
+        ArticleCategory(
+            name: "社团章程",
+            symbol: "book.closed.fill",
+            articles: [
+                Article(
+                    title: "苏州中学树莓社章程",
+                    subtitle: "社团核心规章制度",
+                    fileName: "constitution",
+                    symbol: "doc.text.fill"
+                ),
+                Article(
+                    title: "章程修订记录",
+                    subtitle: "历次章程修订历史",
+                    fileName: "constitution-revision-history",
+                    symbol: "clock.arrow.circlepath"
+                ),
+                Article(
+                    title: "章程附录",
+                    subtitle: "机构设置与特别致谢名录",
+                    fileName: "constitution-appendices",
+                    symbol: "doc.append.fill"
+                )
+            ]
+        ),
+        ArticleCategory(
+            name: "演讲文稿",
+            symbol: "megaphone.fill",
+            articles: [
+                Article(
+                    title: "国旗下讲话",
+                    subtitle: "2024年10月28日",
+                    fileName: "raspberry-club-speech",
+                    symbol: "mic.fill"
+                )
+            ]
+        )
+    ]
 
     var body: some View {
-
-
         NavigationStack {
-
-
-            List {
-
-
-                NavigationLink {
-
-
-                    MarkdownArticleView(
-                        fileName:
-                            "constitution"
+            Group {
+                if categories.isEmpty {
+                    ContentUnavailableView(
+                        "暂无文章",
+                        systemImage: "book.closed",
+                        description: Text("内容正在准备中")
                     )
-
-
-                } label: {
-
-
-                    Label(
-                        "苏州中学树莓社章程",
-                        systemImage:
-                            "doc.text"
-                    )
-
+                } else {
+                    List {
+                        ForEach(categories) { category in
+                            Section {
+                                ForEach(category.articles) { article in
+                                    NavigationLink {
+                                        MarkdownArticleView(fileName: article.fileName)
+                                    } label: {
+                                        Label {
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                Text(article.title)
+                                                    .font(.headline)
+                                                Text(article.subtitle)
+                                                    .font(.subheadline)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            .padding(.vertical, 2)
+                                        } icon: {
+                                            Image(systemName: article.symbol)
+                                                .symbolRenderingMode(.hierarchical)
+                                                .foregroundStyle(Color.accentColor)
+                                        }
+                                    }
+                                    .accessibilityElement(children: .combine)
+                                    .accessibilityLabel("\(article.title)，\(article.subtitle)")
+                                    .accessibilityHint("查看文章详情")
+                                }
+                            } header: {
+                                Text(category.name)
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
                 }
-
-
-
             }
-
-
-            .navigationTitle(
-                "文章"
-            )
-
+            .navigationTitle("文章")
+            .navigationBarTitleDisplayMode(.large)
         }
-
-
     }
-
 }
 
 
