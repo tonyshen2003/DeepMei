@@ -6,6 +6,10 @@
 	objectVersion = 110;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BBA2E701301263310087BD02 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = BBA2E700301263310087BD02 /* MarkdownUI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		BBC083C4301175F700477523 /* DeepMei.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeepMei.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -22,6 +26,7 @@
 		BBC083C1301175F700477523 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				BBA2E701301263310087BD02 /* MarkdownUI in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -60,6 +65,9 @@
 				BBC083C6301175F700477523 /* DeepMei */,
 			);
 			name = DeepMei;
+			packageProductDependencies = (
+				BBA2E700301263310087BD02 /* MarkdownUI */,
+			);
 			productName = DeepMei;
 			productReference = BBC083C4301175F700477523 /* DeepMei.app */;
 			productType = "com.apple.product-type.application";
@@ -88,6 +96,9 @@
 			);
 			mainGroup = BBC083BB301175F700477523;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BBA2E6FF301263310087BD02 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BBC083C5301175F700477523 /* Products */;
 			projectDirPath = "";
@@ -332,6 +343,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		BBA2E6FF301263310087BD02 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BBA2E700301263310087BD02 /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BBA2E6FF301263310087BD02 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = BBC083BC301175F700477523 /* Project object */;
 	validationLevel = 1;
