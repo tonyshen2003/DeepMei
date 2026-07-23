@@ -242,19 +242,19 @@ struct ArticleListView: View {
             articles: [
                 Article(
                     title: "用流动的影像传承历史，以不变的温度记录人文——国旗下讲话",
-                    subtitle: "2024年10月28日",
+                    subtitle: "王嫣然、第六届组委会集体",
                     fileName: "raspberry-club-speech",
                     symbol: "mic.fill"
                 ),
                 Article(
                     title: "守温度、传火种、向未来——在树莓社第八届社员大会上的工作报告",
-                    subtitle: "2026年1月4日",
+                    subtitle: "杨梓言社长",
                     fileName: "SMS-RC_C8_President_Report_2026",
                     symbol: "text.page"
                 ),
                 Article(
                     title: "没有任何一帧，可以决定整部电影——树莓社致所有考生的一封信",
-                    subtitle: "2026年6月9日",
+                    subtitle: "陈雨馨社长",
                     fileName: "NoFrameDecidesMovie",
                     symbol: "envelope.fill"
                 )
@@ -306,7 +306,7 @@ struct ArticleListView: View {
                     .listStyle(.insetGrouped)
                 }
             }
-            .navigationTitle("文章")
+            .navigationTitle("树莓文库")
             .navigationBarTitleDisplayMode(.large)
         }
     }
