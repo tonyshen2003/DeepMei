@@ -27,10 +27,11 @@ class MemberStore {
 
         guard let url =
                 Bundle.main.url(
-                    forResource:"Members",
+                    forResource:"Member",
                     withExtension:"json"
                 )
         else {
+            print("Member.json 未找到")
             return
         }
 
@@ -62,6 +63,15 @@ class MemberStore {
 
         members.first{
             $0.id == id
+        }
+
+    }
+
+
+    func find(name:String)->Member?{
+
+        members.first{
+            $0.name.lowercased() == name.lowercased()
         }
 
     }
