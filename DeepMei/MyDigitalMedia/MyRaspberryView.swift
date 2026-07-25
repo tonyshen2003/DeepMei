@@ -12,9 +12,7 @@ struct MyRaspberryView: View {
     @State private var member: Member?
 
 
-    @StateObject
-    private var scanner = NFCScanner()
-
+    @State private var memberId: String = ""
 
 
     var body: some View {
@@ -62,20 +60,29 @@ struct MyRaspberryView: View {
 
 
 
+                    TextField(
+                        "请输入社员号",
+                        text: $memberId
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("社员号输入框")
+                    .accessibilityHint("请输入您的社员号进行身份识别")
+
+
+
                     Button {
 
-
-                        scanner.scan()
-
+                        member =
+                        MemberStore.shared.find(
+                            id: memberId
+                        )
 
                     } label: {
 
-
                         Label(
-                            "刷 NFC 卡",
-                            systemImage:"wave.3.right"
+                            "确认",
+                            systemImage:"checkmark.circle"
                         )
-
 
                     }
 
@@ -85,21 +92,6 @@ struct MyRaspberryView: View {
 
             }
             .navigationTitle("我的树莓")
-
-        }
-
-
-        // NFC读取完成
-        .onChange(of: scanner.result) { oldValue, newValue in
-
-            guard !newValue.isEmpty else {
-                return
-            }
-
-            member =
-            MemberStore.shared.find(
-                id: newValue
-            )
 
         }
 
