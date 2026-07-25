@@ -27,7 +27,7 @@ class MemberStore {
 
         guard let url =
                 Bundle.main.url(
-                    forResource:"Members",
+                    forResource:"Member",
                     withExtension:"json"
                 )
         else {

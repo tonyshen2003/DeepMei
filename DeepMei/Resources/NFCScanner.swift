@@ -1,84 +1,67 @@
 //
-//  NFCScanner.swift
+//  QRScanner.swift
 //  DeepMei
 //
 //  Created by 沈孙丰 on 2026/7/26.
 //
+
 import Foundation
-import CoreNFC
-public import Combine
+import AVFoundation
 
+class QRScanner: NSObject, ObservableObject {
+    @Published var scannedCode: String?
+    @Published var isScanning = false
 
-@MainActor
-class NFCScanner: NSObject, ObservableObject {
+    private var captureSession: AVCaptureSession?
+    private var videoPreviewLayer: AVCaptureVideoPreviewLayer?
 
-
-    @Published var result = ""
-
-
-    private var session:NFCNDEFReaderSession?
-
-
-    func scan() {
-
-        session =
-        NFCNDEFReaderSession(
-            delegate:self,
-            queue:nil, invalidateAfterFirstRead: true
-        )
-
-        session?.alertMessage =
-        "请靠近树莓身份卡"
-
-        session?.begin()
-
-    }
-
-}
-
-
-
-extension NFCScanner:
-NFCNDEFReaderSessionDelegate {
-
-
-    nonisolated func readerSession(
-        _ session:NFCNDEFReaderSession,
-        didInvalidateWithError error:Error
-    ){
-
-        print(error)
-
-    }
-
-
-    nonisolated func readerSession(
-        _ session:NFCNDEFReaderSession,
-        didDetectNDEFs messages:[NFCNDEFMessage]
-    ){
-
-        for message in messages {
-
-            for record in message.records {
-
-
-                if let value =
-                String(
-                    data:record.payload,
-                    encoding:.utf8
-                ){
-
-                    Task { @MainActor in
-
-                        self.result = value
-
-                    }
-
-                }
-
-            }
+    func startScanning() {
+        guard let captureDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+            print("无法访问相机")
+            return
         }
 
+        do {
+            let input = try AVCaptureDeviceInput(device: captureDevice)
+            captureSession = AVCaptureSession()
+            captureSession?.addInput(input)
+
+            let captureMetadataOutput = AVCaptureMetadataOutput()
+            captureSession?.addOutput(captureMetadataOutput)
+
+            captureMetadataOutput.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
+            captureMetadataOutput.metadataObjectTypes = [.qr]
+
+            isScanning = true
+            captureSession?.startRunning()
+        } catch {
+            print("相机初始化失败: \(error)")
+            isScanning = false
+        }
     }
 
+    func stopScanning() {
+        captureSession?.stopRunning()
+        isScanning = false
+        scannedCode = nil
+    }
+
+    func getPreviewLayer() -> AVCaptureVideoPreviewLayer? {
+        guard let session = captureSession else { return nil }
+        if videoPreviewLayer == nil {
+            videoPreviewLayer = AVCaptureVideoPreviewLayer(session: session)
+            videoPreviewLayer?.videoGravity = .resizeAspectFill
+        }
+        return videoPreviewLayer
+    }
+}
+
+extension QRScanner: AVCaptureMetadataOutputObjectsDelegate {
+    func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
+        if let metadataObj = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
+           let code = metadataObj.stringValue {
+            scannedCode = code
+            stopScanning()
+        }
+    }
 }
