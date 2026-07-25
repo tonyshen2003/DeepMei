@@ -15,10 +15,11 @@ struct ContentView: View {
             HomeNavigationView()
                 .tabItem {
                     Label(
-                        "探索",
+                        "首页",
                         systemImage: "safari.fill"
                     )
                 }
+            
             // MARK: - 文章 / 章程
             ArticleListView()
                 .tabItem {
@@ -30,26 +31,22 @@ struct ContentView: View {
             // MARK: - 官网
             WebView(
                 url: URL(
-                    string: "https://szzxshumei.com/"
+                    string: "https://szzxshumei.feishu.cn/wiki/NP1hwhNMVidoe6kWoDjcCkjSnPd?from=from_copylink"
                 )!
             )
             .ignoresSafeArea(edges: .bottom)
             .tabItem {
                 Label(
-                    "官网",
+                    "活动",
                     systemImage: "globe.asia.australia.fill"
                 )
             }
             // MARK: - 树莓酱
-            WebView(
-                url: URL(
-                    string: "https://raspjam.com/"
-                )!
-            )
+            MyRaspberryView()
             .ignoresSafeArea()
             .tabItem {
                 Label(
-                    "树莓酱",
+                    "我的树莓",
                     systemImage: "star.fill"
                 )
             }
@@ -62,15 +59,21 @@ struct ContentView: View {
 struct HomeNavigationView: View {
     @State private var showVideoCover = false
     @State private var showRegisterSheet = false
+    @State private var emojiIndex: Int = Int.random(in: 1...49)
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
                     VStack(spacing: 10) {
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 42))
-                            .foregroundStyle(.pink)
+                        Image("\(emojiIndex)")
+                            .resizable() // 自定义图片必须加 resizable 才能调整大小
+                            .frame(width: 150,height: 150) // 设置你需要的尺寸
+                            .id(emojiIndex)
+                            .transition(.asymmetric(
+                                    insertion: .opacity,
+                                                            removal: .identity
+                                                        ))
                         Text("一个关注新时代数字媒体的社团")
                             .font(.headline)
                         Text("以影视创作为核心的艺术创作交流平台")
@@ -88,7 +91,7 @@ struct HomeNavigationView: View {
                             icon:
                                 "person.3.sequence.fill",
                             iconColor:
-                                .orange
+                                    .orange
                         )
                     }
                     .buttonStyle(.plain)
@@ -102,7 +105,7 @@ struct HomeNavigationView: View {
                             icon:
                                 "film.fill",
                             iconColor:
-                                .blue
+                                    .blue
                         )
                     }
                     .buttonStyle(.plain)
@@ -113,12 +116,12 @@ struct HomeNavigationView: View {
                         icon:
                             "paintpalette.fill",
                         iconColor:
-                            .purple
+                                .purple
                     )
                 }
                 .padding()
             }
-            .navigationTitle("树莓社")
+            .navigationTitle("欢迎！")
             .toolbar {
                 ToolbarItem(
                     placement: .topBarTrailing
@@ -166,11 +169,11 @@ struct HomeNavigationView: View {
                         url:
                             URL(
                                 string:
-                                "https://cqbxhfrnwy.coze.site?t=\(Date().timeIntervalSince1970)"
+                                    "https://cqbxhfrnwy.coze.site?t=\(Date().timeIntervalSince1970)"
                             )!
                     )
                     .navigationTitle(
-                        "社员登记"
+                        "活动签到"
                     )
                     .navigationBarTitleDisplayMode(
                         .inline
@@ -178,7 +181,7 @@ struct HomeNavigationView: View {
                     .toolbar {
                         ToolbarItem(
                             placement:
-                                .topBarLeading
+                                    .topBarLeading
                         ) {
                             Button(
                                 "关闭"
@@ -189,6 +192,11 @@ struct HomeNavigationView: View {
                     }
                 }
             }
+            .onAppear {
+                            withAnimation(.easeIn(duration: 1.0)) { // 使用 .easeIn 淡入效果更自然
+                                emojiIndex = Int.random(in: 1...49)
+                            }
+                        }
         }
     }
 }

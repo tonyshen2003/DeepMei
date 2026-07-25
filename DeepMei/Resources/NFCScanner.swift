@@ -4,44 +4,45 @@
 //
 //  Created by 沈孙丰 on 2026/7/26.
 //
-
-
 import Foundation
 import CoreNFC
+public import Combine
 
 
-class NFCScanner:
-NSObject,
-ObservableObject,
-NFCNDEFReaderSessionDelegate {
+@MainActor
+class NFCScanner: NSObject, ObservableObject {
 
 
-    var session:NFCNDEFReaderSession?
+    @Published var result = ""
 
 
-    var result:String=""
+    private var session:NFCNDEFReaderSession?
 
 
-    func scan(){
-
+    func scan() {
 
         session =
         NFCNDEFReaderSession(
             delegate:self,
-            queue:nil
+            queue:nil, invalidateAfterFirstRead: true
         )
 
-
         session?.alertMessage =
-        "请靠近树莓 NFC 卡"
-
+        "请靠近树莓身份卡"
 
         session?.begin()
 
     }
 
+}
 
-    func readerSession(
+
+
+extension NFCScanner:
+NFCNDEFReaderSessionDelegate {
+
+
+    nonisolated func readerSession(
         _ session:NFCNDEFReaderSession,
         didInvalidateWithError error:Error
     ){
@@ -51,29 +52,31 @@ NFCNDEFReaderSessionDelegate {
     }
 
 
-    func readerSession(
+    nonisolated func readerSession(
         _ session:NFCNDEFReaderSession,
         didDetectNDEFs messages:[NFCNDEFMessage]
     ){
 
         for message in messages {
 
-
             for record in message.records {
 
 
-                if let text =
-                    String(
+                if let value =
+                String(
                     data:record.payload,
                     encoding:.utf8
-                    ){
+                ){
 
-                    result=text
+                    Task { @MainActor in
+
+                        self.result = value
+
+                    }
 
                 }
 
             }
-
         }
 
     }
