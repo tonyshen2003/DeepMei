@@ -8,9 +8,18 @@
 import SwiftUI
 import WebKit
 
+private enum MainTab: Hashable {
+    case home
+    case library
+    case camera
+    case mine
+}
+
 struct ContentView: View {
+    @State private var selectedTab: MainTab = .home
+
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             // MARK: - 探索
             HomeNavigationView()
                 .tabItem {
@@ -19,7 +28,8 @@ struct ContentView: View {
                         systemImage: "safari.fill"
                     )
                 }
-            
+                .tag(MainTab.home)
+
             // MARK: - 文章 / 章程
             ArticleListView()
                 .tabItem {
@@ -28,19 +38,16 @@ struct ContentView: View {
                         systemImage: "book.pages.fill"
                     )
                 }
-            // MARK: - 官网
-            WebView(
-                url: URL(
-                    string: "https://szzxshumei.feishu.cn/wiki/NP1hwhNMVidoe6kWoDjcCkjSnPd?from=from_copylink"
-                )!
-            )
-            .ignoresSafeArea(edges: .bottom)
-            .tabItem {
-                Label(
-                    "活动",
-                    systemImage: "globe.asia.australia.fill"
-                )
-            }
+                .tag(MainTab.library)
+            // MARK: - 导演取景器 (树莓相机)
+            DirectorCameraView()
+                .tabItem {
+                    Label(
+                        "取景器",
+                        systemImage: "camera.viewfinder"
+                    )
+                }
+                .tag(MainTab.camera)
             // MARK: - 树莓酱
             MyRaspberryView()
             .ignoresSafeArea()
@@ -50,6 +57,7 @@ struct ContentView: View {
                     systemImage: "star.fill"
                 )
             }
+            .tag(MainTab.mine)
         }
     }
 }

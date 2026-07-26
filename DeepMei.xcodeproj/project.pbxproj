@@ -14,9 +14,22 @@
 		BBC083C4301175F700477523 /* DeepMei.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeepMei.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BB383B4A30168DEA005EF5E9 /* Exceptions for "DeepMei" folder in "DeepMei" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = BBC083C3301175F700477523 /* DeepMei */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		BBC083C6301175F700477523 /* DeepMei */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BB383B4A30168DEA005EF5E9 /* Exceptions for "DeepMei" folder in "DeepMei" target */,
+			);
 			path = DeepMei;
 			sourceTree = "<group>";
 		};
@@ -185,6 +198,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -242,6 +256,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -257,7 +272,10 @@
 				DEVELOPMENT_TEAM = 88YLJQ576T;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DeepMei/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "用于扫码和登记拍照";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "用于在取景器拍照时记录拍摄地点，并将经纬度写入照片 EXIF";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "用于将拍摄的照片保存到系统相册";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -294,7 +312,10 @@
 				DEVELOPMENT_TEAM = 88YLJQ576T;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = DeepMei/Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "用于扫码和登记拍照";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "用于在取景器拍照时记录拍摄地点，并将经纬度写入照片 EXIF";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "用于将拍摄的照片保存到系统相册";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

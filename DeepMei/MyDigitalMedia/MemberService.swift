@@ -149,6 +149,30 @@ private enum LarkValue: Decodable, Sendable {
             }
         }
 
+    /// 🎨 解析代表作品（仅提取图片 URL + 文件名 + MIME 类型）
+    var workItems: [WorkItem] {
+        switch self {
+        case .array(let arr):
+            return arr.flatMap { $0.workItems }
+        case .object(let dict):
+            let urlString = dict["tmp_url"]?.flattenedText ?? dict["url"]?.flattenedText
+            guard let url = urlString, !url.isEmpty else { return [] }
+
+            var name = ""
+            if case .string(let n) = dict["name"] ?? .null { name = n }
+
+            var mimeType = ""
+            if case .string(let t) = dict["type"] ?? .null { mimeType = t }
+
+            let type = WorkItem.WorkType.detect(mimeType: mimeType, fileNameOrURL: name.isEmpty ? url : name)
+            return [WorkItem(url: url, type: type, fileName: name)]
+        case .string(let s):
+            return s.hasPrefix("http") ? [WorkItem(url: s)] : []
+        default:
+            return []
+        }
+    }
+
     var intValue: Int? {
         switch self {
         case .int(let i): return i
@@ -383,7 +407,7 @@ actor MemberService {
                 totalHours: fields["统计时长 (社团活动记录表)"]?.doubleValue ?? 0,
                 description: text("详细介绍"),
                 photoURLs: fields["个人照片"]?.imageURLs ?? [],
-                ArtURLs: fields["代表作品"]?.imageURLs ?? []
+                works: fields["代表作品"]?.workItems ?? []
             )
         }
 }

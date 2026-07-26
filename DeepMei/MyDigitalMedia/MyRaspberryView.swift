@@ -1,8 +1,46 @@
 import SwiftUI
-
 import Foundation
 
 // MARK: - 1. 数据模型定义
+
+/// 代表作品项（仅图片）
+struct WorkItem: Identifiable, Equatable {
+    var id: String { url }
+    let url: String
+    let type: WorkType
+    let fileName: String
+
+    enum WorkType: Equatable {
+        case image
+        case unsupported
+
+        /// 常见图片格式
+        private static let supportedImageExts: Set<String> = ["jpg", "jpeg", "png", "heic", "gif", "webp", "bmp", "tiff"]
+
+        /// 通过文件名或 URL 扩展名判断类型
+        static func detect(from fileNameOrURL: String) -> WorkType {
+            let ext = (fileNameOrURL as NSString).pathExtension.lowercased()
+            guard !ext.isEmpty else { return .unsupported }
+            return supportedImageExts.contains(ext) ? .image : .unsupported
+        }
+
+        /// 综合 MIME 类型 + 文件名判断（MIME 优先，扩展名兜底）
+        static func detect(mimeType: String, fileNameOrURL: String) -> WorkType {
+            let lowerMime = mimeType.lowercased()
+            if lowerMime.hasPrefix("image/") {
+                return .image
+            }
+            return detect(from: fileNameOrURL)
+        }
+    }
+
+    init(url: String, type: WorkType? = nil, fileName: String = "") {
+        self.url = url
+        self.type = type ?? .detect(from: fileName.isEmpty ? url : fileName)
+        self.fileName = fileName.isEmpty ? (url as NSString).lastPathComponent : fileName
+    }
+}
+
 struct RaspberryMember: Identifiable, Equatable, Decodable {
     var id: String { idCode }
 
@@ -26,8 +64,7 @@ struct RaspberryMember: Identifiable, Equatable, Decodable {
     let description: String     // 详细介绍
     let photoURLs: [String]     // 个人照片 URL 列表
     var avatarURL: String? { photoURLs.first }
-    let ArtURLs: [String]       // 作品图片 URL 列表
-    var ArtpicURL: String? { ArtURLs.first }
+    let works: [WorkItem]       // 代表作品列表（图片或视频）
     
     // 💡 格式化输出：提取入社年份 (如 "2018")
     var joinYearFormatted: String {
@@ -71,7 +108,7 @@ extension RaspberryMember {
         case totalHours = "统计时长 (社团活动记录表)"
         case description = "详细介绍"
         case avatarList = "个人照片"
-        case ArtpicList = "作品图片"
+        case ArtpicList = "代表作品"
     }
 
     init(from decoder: Decoder) throws {
@@ -132,12 +169,18 @@ extension RaspberryMember {
             photoURLs = []
         }
         
-        // 6. 处理作品 (提取图片临时下载 URL 列表)
-        if let photos = try? container.decode([[String: DynamicCodingProperty]].self, forKey: .ArtpicList) {
-            let urls = photos.compactMap { $0["tmp_url"]?.stringValue ?? $0["url"]?.stringValue }
-            ArtURLs = urls
+        // 6. 处理作品（仅保留图片）
+        if let items = try? container.decode([[String: DynamicCodingProperty]].self, forKey: .ArtpicList) {
+            works = items.compactMap { dict in
+                let urlString = dict["tmp_url"]?.stringValue ?? dict["url"]?.stringValue
+                guard let urlString = urlString, !urlString.isEmpty else { return nil }
+                let name = dict["name"]?.stringValue ?? ""
+                let mimeType = dict["type"]?.stringValue ?? ""
+                let type = WorkItem.WorkType.detect(mimeType: mimeType, fileNameOrURL: name.isEmpty ? urlString : name)
+                return WorkItem(url: urlString, type: type, fileName: name)
+            }
         } else {
-            ArtURLs = []
+            works = []
         }
     }
 }
@@ -153,7 +196,6 @@ private struct DynamicCodingProperty: Codable {
 // MARK: - 2. 主页面视图
 struct MyRaspberryView: View {
     @State private var member: RaspberryMember?
-    @State private var members: [RaspberryMember] = []
 
     // 查询状态管理
     @State private var searchText: String = ""
@@ -252,19 +294,6 @@ struct MyRaspberryView: View {
             searchText = ""
             notFound = false
         }
-    }
-
-    private func loadMembers() {
-        guard let url = Bundle.main.url(forResource: "Member", withExtension: "json"),
-              let data = try? Data(contentsOf: url) else {
-            return
-        }
-        
-        let decoder = JSONDecoder()
-        // 💡 优化点 2：设置全局时间戳解码策略（作为兜底）
-        decoder.dateDecodingStrategy = .millisecondsSince1970
-        
-        members = (try? decoder.decode([RaspberryMember].self, from: data)) ?? []
     }
 
     private func performSearch() {
@@ -399,6 +428,13 @@ struct MemberProfileCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading) // 💡 确保整个列表区撑满卡片
             .padding(16)
+
+            // 5. 代表作品集
+            if !member.works.isEmpty {
+                Divider()
+                    .padding(.horizontal, 16)
+                WorkGridSection(works: member.works)
+            }
         }
         .background(Color(uiColor: .secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -594,6 +630,110 @@ struct DetailRow: View {
         }
         // 💡 2. 核心修正：强制该组件占满父容器宽度，并统一靠左对齐
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+
+
+// MARK: - 5. 代表作品集组件
+struct WorkGridSection: View {
+    let works: [WorkItem]
+
+    // 1 张图时全宽单列，2 张及以上用 2 列网格
+    private var columns: [GridItem] {
+        supportedWorks.count <= 1
+            ? [GridItem(.flexible(), spacing: 12)]
+            : [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+    }
+
+    private var supportedWorks: [WorkItem] {
+        works.filter { $0.type != .unsupported }
+    }
+    private var unsupportedCount: Int {
+        works.count - supportedWorks.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // 标题行
+            HStack(spacing: 8) {
+                Image(systemName: "photo.on.rectangle.angled")
+                    .font(.subheadline)
+                    .foregroundStyle(.teal)
+                Text("代表作品")
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text("\(supportedWorks.count) 件")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 8)
+
+            // 作品网格
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(supportedWorks) { work in
+                    ImageWorkCard(work: work)
+                }
+            }
+
+            // 不支持格式提示
+            if unsupportedCount > 0 {
+                HStack(spacing: 4) {
+                    Image(systemName: "info.circle")
+                        .font(.caption2)
+                    Text("另有 \(unsupportedCount) 个文件格式不支持")
+                        .font(.caption2)
+                }
+                .foregroundStyle(.tertiary)
+                .padding(.top, 2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+    }
+}
+
+struct ImageWorkCard: View {
+    let work: WorkItem
+    @State private var selectedImage: IdentifiableImage?
+
+    var body: some View {
+        FeishuAsyncImage(urlString: work.url, placeholderName: "作品")
+            .scaledToFill()
+            .frame(maxWidth: .infinity)
+            .frame(height: 150)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                // 全屏查看指示
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(5)
+                    .background(.ultraThinMaterial.opacity(0.9), in: Circle())
+                    .padding(8)
+            }
+            .overlay(alignment: .bottomLeading) {
+                // 文件名标签
+                if !work.fileName.isEmpty {
+                    Text(work.fileName)
+                        .font(.caption2)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .padding(8)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                selectedImage = IdentifiableImage(url: work.url)
+            }
+            .fullScreenCover(item: $selectedImage) { image in
+                ImageViewer(url: image.url)
+            }
     }
 }
 
