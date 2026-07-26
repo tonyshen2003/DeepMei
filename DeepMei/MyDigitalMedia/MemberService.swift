@@ -1,11 +1,10 @@
 //
-//  Untitled.swift
+//  MemberService.swift
 //  DeepMei
-//
-//  Created by 沈孙丰 on 2026/7/26.
 //
 
 import Foundation
+import UIKit
 
 // MARK: - 错误类型
 enum MemberServiceError: Error, LocalizedError {
@@ -23,7 +22,7 @@ enum MemberServiceError: Error, LocalizedError {
 }
 
 // MARK: - 飞书 API 响应模型
-private struct LarkTokenResponse: Decodable {
+private struct LarkTokenResponse: Decodable, Sendable {
     let code: Int
     let msg: String
     let tenantAccessToken: String
@@ -34,12 +33,12 @@ private struct LarkTokenResponse: Decodable {
     }
 }
 
-private struct LarkRecordListResponse: Decodable {
+private struct LarkRecordListResponse: Decodable, Sendable {
     let code: Int
     let msg: String
     let data: DataPayload?
 
-    struct DataPayload: Decodable {
+    struct DataPayload: Decodable, Sendable {
         let items: [Item]?
         let pageToken: String?
         let hasMore: Bool?
@@ -51,14 +50,37 @@ private struct LarkRecordListResponse: Decodable {
         }
     }
 
-    struct Item: Decodable {
+    struct Item: Decodable, Sendable {
         let fields: [String: LarkValue]
     }
 }
 
+private struct DriveTmpDownloadResponse: Decodable, Sendable {
+    let code: Int
+    let msg: String
+    let data: DataPayload?
+
+    struct DataPayload: Decodable, Sendable {
+        let tmpDownloadURLs: [TmpDownloadURL]?
+
+        enum CodingKeys: String, CodingKey {
+            case tmpDownloadURLs = "tmp_download_urls"
+        }
+    }
+
+    struct TmpDownloadURL: Decodable, Sendable {
+        let fileToken: String?
+        let tmpDownloadURL: String?
+
+        enum CodingKeys: String, CodingKey {
+            case fileToken = "file_token"
+            case tmpDownloadURL = "tmp_download_url"
+        }
+    }
+}
+
 // MARK: - 飞书字段值通用解码
-// 飞书多行文本返回 [{text:"...", type:"text"}]，单行文本返回 String，数字返回 Number
-private enum LarkValue: Decodable {
+private enum LarkValue: Decodable, Sendable {
     case string(String)
     case double(Double)
     case int(Int)
@@ -81,14 +103,51 @@ private enum LarkValue: Decodable {
         case .string(let s): return s
         case .int(let i): return String(i)
         case .double(let d): return d == d.rounded() ? String(Int(d)) : String(d)
-        case .array(let arr): return arr.map { $0.flattenedText }.joined()
+        case .array(let arr): return arr.map { $0.flattenedText }.joined(separator: ", ")
         case .object(let dict):
             if case .string(let t) = dict["text"] ?? .null { return t }
             if case .string(let n) = dict["name"] ?? .null { return n }
+            if case .string(let a) = dict["alias"] ?? .null { return a }
             return ""
         case .null: return ""
         }
     }
+
+    /// 📸 优先解析飞书【个人照片】的 tmp_url（能有效规避 403）
+        var imageURL: String? {
+            switch self {
+            case .array(let arr):
+                for item in arr {
+                    if let url = item.imageURL { return url }
+                }
+                return nil
+            case .object(let dict):
+                // 💡 核心修改：优先匹配 tmp_url，其次才是普通 url
+                if case .string(let tmpUrl) = dict["tmp_url"] ?? .null { return tmpUrl }
+                if case .string(let url) = dict["url"] ?? .null { return url }
+                return nil
+            case .string(let s):
+                return s.hasPrefix("http") ? s : nil
+            default:
+                return nil
+            }
+        }
+
+        var imageURLs: [String] {
+            switch self {
+            case .array(let arr):
+                return arr.flatMap { $0.imageURLs }
+            case .object(let dict):
+                // 💡 核心修改：优先匹配 tmp_url
+                if case .string(let tmpUrl) = dict["tmp_url"] ?? .null { return [tmpUrl] }
+                if case .string(let url) = dict["url"] ?? .null { return [url] }
+                return []
+            case .string(let s):
+                return s.hasPrefix("http") ? [s] : []
+            default:
+                return []
+            }
+        }
 
     var intValue: Int? {
         switch self {
@@ -110,31 +169,73 @@ private enum LarkValue: Decodable {
 }
 
 // MARK: - 飞书社员数据服务
-// ⚠️ 测试期临时硬编码密钥，上架前务必迁移到后端中间件！
 actor MemberService {
     static let shared = MemberService()
 
-    // TODO: 替换为你飞书应用的真实凭据
-    private let appId = "cli_xxxxxxxxxxxxxxxx"
-    private let appSecret = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-    private let appToken = "xxxxxxxxxxxxxxxxxxxx"  // 多维表格 URL 中 /base/ 后的部分
-    private let tableId = "tblxxxxxxxxxxxx"        // 多维表格 URL 中 ?table= 后的部分
+    private let appId = "cli_aaefa41a0c389bd9"
+    private let appSecret = "LxJl21fuVl1GHQitcBwcXeJe2Y6SObJ6"
+    private let appToken = "YUZ4wB3YJiLTq2kUobZccYOKnBb"
+    private let tableId = "tblepAz1PHnzwxA2"
 
     private let baseURL = URL(string: "https://open.feishu.cn")!
     private var cachedToken: String?
     private var tokenExpiry: Date?
 
-    /// 按姓名或社员编号查询社员
-    func searchMember(byNameOrCode query: String) async throws -> RaspberryMember? {
-        let token = try await getTenantAccessToken()
-        let all = try await fetchAllRecords(token: token)
+    /// 全能查询（支持：姓名 / 社员编号 / 社员识别码 / 认读码 / 社员序号）
+    func searchMember(byNameOrCodeOrAlias query: String) async throws -> RaspberryMember? {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return all.first {
-            $0.name == trimmed || $0.idCode.caseInsensitiveCompare(trimmed) == .orderedSame
+        guard !trimmed.isEmpty else { return nil }
+        
+        let token = try await getTenantAccessToken()
+        
+        // ⚡️ 多维度服务端精准 Filter
+        let filterFormula = """
+        OR(
+            CurrentValue.[姓名] = "\(trimmed)",
+            CurrentValue.[别名] = "\(trimmed)",
+            CurrentValue.[社员编号] = "\(trimmed)",
+            CurrentValue.[社员识别码] = "\(trimmed)",
+            CurrentValue.[社员身份编码（认读码）] = "\(trimmed)",
+            CurrentValue.[社员序号] = "\(trimmed)"
+        )
+        """
+        
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/open-apis/bitable/v1/apps/\(appToken)/tables/\(tableId)/records"),
+            resolvingAgainstBaseURL: false
+        )!
+        
+        components.queryItems = [
+            URLQueryItem(name: "filter", value: filterFormula),
+            URLQueryItem(name: "page_size", value: "1")
+        ]
+        
+        guard let requestURL = components.url else {
+            throw MemberServiceError.invalidURL
         }
+        
+        var req = URLRequest(url: requestURL)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+            throw MemberServiceError.httpError((resp as? HTTPURLResponse)?.statusCode ?? -1)
+        }
+        
+        let decoded = try JSONDecoder().decode(LarkRecordListResponse.self, from: data)
+        guard decoded.code == 0 else {
+            throw MemberServiceError.apiError(code: decoded.code, message: decoded.msg)
+        }
+        
+        if let firstItem = decoded.data?.items?.first {
+            return await Self.mapRecord(fields: firstItem.fields)
+        }
+        
+        return nil
     }
 
-    // MARK: Token
+    // MARK: Token 鉴权
     private func getTenantAccessToken() async throws -> String {
         if let cached = cachedToken, let exp = tokenExpiry, exp > Date().addingTimeInterval(60) {
             return cached
@@ -159,57 +260,130 @@ actor MemberService {
         return decoded.tenantAccessToken
     }
 
-    // MARK: Records (分页拉取所有记录)
-    private func fetchAllRecords(token: String) async throws -> [RaspberryMember] {
-        var members: [RaspberryMember] = []
-        var pageToken: String?
-        repeat {
-            var components = URLComponents(
-                url: baseURL.appendingPathComponent("/open-apis/bitable/v1/apps/\(appToken)/tables/\(tableId)/records"),
-                resolvingAgainstBaseURL: false
-            )!
-            var queryItems = [URLQueryItem(name: "page_size", value: "100")]
-            if let pt = pageToken { queryItems.append(URLQueryItem(name: "page_token", value: pt)) }
-            components.queryItems = queryItems
-            var req = URLRequest(url: components.url!)
+    // MARK: - 专门下载带签名的 tmp_url（不需要携带 Authorization 头）
+    func downloadTempMedia(from urlString: String) async throws -> UIImage? {
+        guard let url = URL(string: urlString) else { return nil }
+
+        print("开始下载 tmp_url：\(urlString)")
+
+        if url.path.contains("/drive/v1/medias/batch_get_tmp_download_url") {
+            let token = try await getTenantAccessToken()
+            var req = URLRequest(url: url)
+            req.httpMethod = "GET"
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
-            let (data, _) = try await URLSession.shared.data(for: req)
-            let decoded = try JSONDecoder().decode(LarkRecordListResponse.self, from: data)
-            guard decoded.code == 0 else {
-                throw MemberServiceError.apiError(code: decoded.code, message: decoded.msg)
-            }
-            for item in decoded.data?.items ?? [] {
-                if let m = Self.mapRecord(fields: item.fields) {
-                    members.append(m)
+
+            let (data, response) = try await URLSession.shared.data(for: req)
+            guard let httpResponse = response as? HTTPURLResponse else { return nil }
+            if httpResponse.statusCode != 200 {
+                print("批量临时下载链接请求失败，状态码: \(httpResponse.statusCode)")
+                if let body = String(data: data, encoding: .utf8) {
+                    print("批量临时下载链接响应体：\(body)")
                 }
+                return nil
             }
-            pageToken = decoded.data?.pageToken
-            if decoded.data?.hasMore != true { break }
-        } while pageToken != nil
-        return members
+
+            let decoded = try JSONDecoder().decode(DriveTmpDownloadResponse.self, from: data)
+            guard decoded.code == 0,
+                  let tmpURLString = decoded.data?.tmpDownloadURLs?.first?.tmpDownloadURL,
+                  let tmpURL = URL(string: tmpURLString) else {
+                print("解析批量临时下载链接失败，返回码: \(decoded.code), msg: \(decoded.msg)")
+                return nil
+            }
+            return try await downloadImageDirectly(from: tmpURL)
+        }
+
+        return try await downloadImageDirectly(from: url)
     }
 
-    // MARK: 字段映射 (多维表格字段名 → RaspberryMember)
-    // ⚠️ 字段名必须与多维表格实际字段名完全一致（含括号、空格）
-    private static func mapRecord(fields: [String: LarkValue]) -> RaspberryMember? {
+    private func downloadImageDirectly(from url: URL) async throws -> UIImage? {
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            print("临时媒体下载失败，状态码: \(statusCode)")
+            if let body = String(data: data, encoding: .utf8) {
+                print("临时媒体下载失败响应体：\(body)")
+            }
+            return nil
+        }
+
+        if let image = UIImage(data: data) {
+            print("🎉 成功从 tmp_url 解析出图片，尺寸: \(image.size)")
+            return image
+        } else {
+            if let errorString = String(data: data, encoding: .utf8) {
+                print("❌ 警告: 状态码200但返回的不是图片，内容是: \(errorString)")
+            } else {
+                print("❌ 警告: 数据无法识别为图片，长度: \(data.count) 字节")
+            }
+            return nil
+        }
+    }
+
+    // MARK: 字段映射（完全匹配实测数据表头）
+    @MainActor private static func mapRecord(fields: [String: LarkValue]) -> RaspberryMember? {
+        
         func text(_ key: String) -> String {
             (fields[key]?.flattenedText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        let name = text("姓名")
-        guard !name.isEmpty else { return nil }
-        return RaspberryMember(
-            name: name,
-            idCode: text("社员编号"),
-            generation: text("年级"),
-            clazz: text("班级（分班后）"),
-            department: text("社团部门"),
-            roles: text("社团职务"),
-            college: text("升学去向"),
-            joinDate: text("入社日期"),
-            activityCount: fields["参与活动次数"]?.intValue ?? 0,
-            totalHours: fields["统计时长 (社团活动记录表)"]?.doubleValue ?? 0,
-            description: text("详细介绍")
-        )
-    }
+            
+            let name = text("姓名")
+            let alias = text("别名")
+    
+            guard !name.isEmpty else { return nil }
+            
+            // 💡 修复核心：安全解析入社日期，将飞书的时间戳转换为 Date 对象
+            let finalJoinDate: Date
+            if let timestamp = fields["入社日期"]?.doubleValue {
+                // 如果能直接拿到数字，判断是否是 13 位毫秒级时间戳
+                let seconds = timestamp > 10000000000 ? timestamp / 1000.0 : timestamp
+                finalJoinDate = Date(timeIntervalSince1970: seconds)
+            } else if let dateString = fields["入社日期"]?.flattenedText, let timestamp = Double(dateString) {
+                // 如果被解析成了字符串型的数字，再次尝试转换
+                let seconds = timestamp > 10000000000 ? timestamp / 1000.0 : timestamp
+                finalJoinDate = Date(timeIntervalSince1970: seconds)
+            } else {
+                // 解析失败的兜底情况
+                finalJoinDate = Date()
+            }
+        
+        let finalBirthday: Date
+        if let timestamp = fields["生日"]?.doubleValue {
+            // 如果能直接拿到数字，判断是否是 13 位毫秒级时间戳
+            let seconds = timestamp > 10000000000 ? timestamp / 1000.0 : timestamp
+            finalBirthday = Date(timeIntervalSince1970: seconds)
+        } else if let dateString = fields["生日"]?.flattenedText, let timestamp = Double(dateString) {
+            // 如果被解析成了字符串型的数字，再次尝试转换
+            let seconds = timestamp > 10000000000 ? timestamp / 1000.0 : timestamp
+            finalBirthday = Date(timeIntervalSince1970: seconds)
+        } else {
+            // 解析失败的兜底情况
+            finalBirthday = Date()
+        }
+        
+            
+            return RaspberryMember(
+                name: name,
+                alias: alias,
+                idCode: text("社员编号"),
+                generation: text("年级"),
+                clazz: text("班级（分班后）"),
+                Birthday:finalBirthday,
+                contactQQ: text("QQ"),
+                department: text("社团部门"),
+                roles: text("社团职务"),
+                rating: text("社员评级"),
+                honors: text("其他职务或荣誉"),
+                college: text("升学去向"),
+                joinDate: finalJoinDate, // ✅ 完美：现在传入的是真正的 Date 对象
+                activityCount: fields["参与活动次数"]?.intValue ?? 0,
+                totalHours: fields["统计时长 (社团活动记录表)"]?.doubleValue ?? 0,
+                description: text("详细介绍"),
+                photoURLs: fields["个人照片"]?.imageURLs ?? [],
+                ArtURLs: fields["代表作品"]?.imageURLs ?? []
+            )
+        }
 }
