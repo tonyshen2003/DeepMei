@@ -107,7 +107,7 @@ struct HomeNavigationView: View {
                             url:
                                 URL(
                                     string:
-                                        "https://shumeiartworks.coze.site"
+                                        "https://shumeiartworks.coze.site?t=\(Date().timeIntervalSince1970)"
                                 )!
                         )
                         .ignoresSafeArea()
