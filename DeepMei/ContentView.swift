@@ -65,7 +65,6 @@ struct ContentView: View {
 // MARK: - 首页
 
 struct HomeNavigationView: View {
-    @State private var showVideoCover = false
     @State private var showRegisterSheet = false
     @State private var emojiIndex: Int = Int.random(in: 1...49)
 
@@ -103,8 +102,22 @@ struct HomeNavigationView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    Button {
-                        showVideoCover = true
+                    NavigationLink {
+                        WebView(
+                            url:
+                                URL(
+                                    string:
+                                        "https://shumeiartworks.coze.site"
+                                )!
+                        )
+                        .ignoresSafeArea()
+                        .navigationTitle(
+                            "作品播放"
+                        )
+                        .navigationBarTitleDisplayMode(
+                            .inline
+                        )
+                        .ignoresSafeArea(edges: .bottom)
                     } label: {
                         ActionCard(
                             title: "作品播放",
@@ -141,30 +154,6 @@ struct HomeNavigationView: View {
                             systemName:
                                 "person.badge.plus"
                         )
-                    }
-                }
-            }
-            .fullScreenCover(
-                isPresented:
-                    $showVideoCover
-            ) {
-                ZStack {
-                    Color.black
-                        .ignoresSafeArea()
-                    VStack {
-                        Spacer()
-                        Text(
-                            "光影长廊\n播放器开发中"
-                        )
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                        Spacer()
-                        Button(
-                            "关闭"
-                        ) {
-                            showVideoCover = false
-                        }
-                        .buttonStyle(.borderedProminent)
                     }
                 }
             }
