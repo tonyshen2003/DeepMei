@@ -12,6 +12,10 @@ struct DeepMeiApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .task {
+                    // 后台预加载工作台数据，切到工作台 tab 时零等待
+                    _ = await WorkbenchService.shared.fetchActivities()
+                }
         }
     }
 }

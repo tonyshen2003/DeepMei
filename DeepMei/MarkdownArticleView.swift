@@ -6,77 +6,174 @@
 //
 
 import SwiftUI
-import MarkdownUI // 1. 导入第三方库
+import MarkdownUI // 需通过 Swift Package Manager 添加：https://github.com/gonzalezreal/swift-markdown-ui
 
 struct MarkdownArticleView: View {
+    
+    // MARK: - 页面加载状态定义
+    private enum LoadState: Equatable {
+        case loading
+        case loaded(String)
+        case failed(String)
+    }
 
     let fileName: String
 
-    // 改为直接存储 String 字符串
-    @State private var markdownContent: String?
-    @State private var errorMessage: String?
+    @State private var loadState: LoadState = .loading
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                if let markdownContent {
-                    // 2. 使用 MarkdownUI 组件进行渲染
-                    Markdown(markdownContent)
-                        .markdownTheme(.gitHub) // 使用预设的 GitHub 样式（可选：.basic 等）
-                        .textSelection(.enabled)
-                } else if let errorMessage {
-                    ContentUnavailableView(
-                        "文章加载失败",
-                        systemImage: "doc.slash",
-                        description: Text(errorMessage)
-                    )
-                } else {
-                    ProgressView("正在加载...")
+                switch loadState {
+                case .loading:
+                    loadingView
+                    
+                case .loaded(let content):
+                    markdownContentView(content)
+                    
+                case .failed(let errorText):
+                    errorView(message: errorText)
                 }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 24)
+            .frame(maxWidth: .infinity, alignment: .leading) // 确保左对齐且占满页面宽度
         }
         .navigationTitle(articleTitle)
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            loadMarkdown()
+        .task(id: fileName) { // 当 fileName 改变时自动重新重新执行 Task
+            await loadMarkdownAsync()
+        }
+    }
+}
+
+// MARK: - 子视图组件 (Subviews)
+private extension MarkdownArticleView {
+    
+    // 1. Markdown 渲染主内容
+    func markdownContentView(_ content: String) -> some View {
+        Markdown(content)
+            // 自定义中英文排版体验（在 gitHub 基础样式上调整）
+            .markdownTheme(
+                .gitHub
+                .text {
+                    ForegroundColor(.primary)
+                    FontSize(16)
+                }
+            )
+            .textSelection(.enabled)
+            // 如果希望图片支持适应屏幕宽度，可以加以下控制：
+            .markdownImageProvider(.asset)
+    }
+
+    // 2. 加载中视图
+    var loadingView: some View {
+        HStack {
+            Spacer()
+            ProgressView("正在加载文章...")
+                .controlSize(.regular)
+                .padding(.top, 60)
+            Spacer()
         }
     }
 
-    // MARK: - 标题
-    private var articleTitle: String {
+    // 3. 错误或空文件提示视图
+    func errorView(message: String) -> some View {
+        ContentUnavailableView(
+            "文章加载失败",
+            systemImage: "doc.slash.fill",
+            description: Text(message)
+        )
+        .padding(.top, 40)
+    }
+}
+
+// MARK: - 业务逻辑 & 异步读取
+private extension MarkdownArticleView {
+    
+    // 动态计算页面标题
+    var articleTitle: String {
         switch fileName {
         case "constitution":
-            return "社团章程"
+            return "苏州中学树莓社章程"
+        case "constitution-revision-history":
+            return "章程修订记录"
+        case "constitution-appendices":
+            return "章程附录"
+        case "shumei-huanyingci":
+            return "树莓派项目介绍树莓社经验分享"
+        case "raspberry-club-speech":
+            return "树莓社2024年国旗下讲话"
+        case "SMS-RC_C8_President_Report_2026":
+            return "树莓社第七届社长工作报告"
+        case "NoFrameDecidesMovie":
+            return "没有任何一帧可以决定整部电影"
         default:
             return "文章"
         }
     }
 
-    // MARK: - 读取 Markdown 文件
-    private func loadMarkdown() {
+    // 异步加载本地文件，避免 UI 阻塞
+    @MainActor
+    func loadMarkdownAsync() async {
+        loadState = .loading
+        
         guard let url = Bundle.main.url(forResource: fileName, withExtension: "md") else {
-            errorMessage = """
-            找不到文章文件：
-            \(fileName).md
-
-            请确认已经加入 Xcode Target Membership
+            let errorMsg = """
+            找不到文章文件：\(fileName).md
+            请确认文件已正确加入项目目录及 Xcode Target Membership。
             """
+            loadState = .failed(errorMsg)
             return
         }
 
-        do {
-            // 直接读取为原生的 String 内容
-            markdownContent = try String(contentsOf: url, encoding: .utf8)
-        } catch {
-            errorMessage = error.localizedDescription
+        // 使用 Task.detached 抛到后台线程读取文件，防止大 Markdown 文本读取时阻塞 Main Thread
+        let result: Result<String, Error> = await Task.detached(priority: .userInitiated) {
+            do {
+                let content = try String(contentsOf: url, encoding: .utf8)
+                return .success(content)
+            } catch {
+                return .failure(error)
+            }
+        }.value
+
+        // 回到 MainActor 更新 @State
+        switch result {
+        case .success(let text):
+            // 防止读取空文本引发页面空白
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            loadState = trimmed.isEmpty ? .failed("文章内容为空。") : .loaded(text)
+        case .failure(let error):
+            loadState = .failed("读取出现异常：\(error.localizedDescription)")
         }
     }
 }
 
-#Preview {
+// MARK: - Xcode Previews
+#Preview("错误路径 - 找不到文件") {
     NavigationStack {
-        MarkdownArticleView(fileName: "constitution")
+        MarkdownArticleView(fileName: "non_existent_file")
+    }
+}
+
+#Preview("正确渲染预期") {
+    NavigationStack {
+        // 由于没有真实的 md，我们在 Preview 里可以用系统支持的主题先看大概样式
+        ScrollView {
+            Markdown("""
+            # 社团章程
+            
+            欢迎阅读 **DeepMei** 社团的相关规则以及核心精神：
+            
+            1. **创作至上**：用影像和数字媒体发声
+            2. **团结协助**：在各环节密切配合
+            
+            > **注意**：章程最终解释权归社团管理部门所有。
+            """)
+            .markdownTheme(.gitHub)
+            .padding(20)
+        }
+        .navigationTitle("社团章程")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

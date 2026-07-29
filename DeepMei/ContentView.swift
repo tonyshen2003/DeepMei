@@ -265,22 +265,28 @@ struct ArticleListView: View {
         ),
         ArticleCategory(
             name: "重要理念",
-            symbol: "letter",
+            symbol: "lightbulb.max.fill",
             articles: [
                 Article(
-                    title: "用流动的影像传承历史，以不变的温度记录人文——国旗下讲话",
+                    title: "树莓派项目介绍树莓社经验分享",
+                    subtitle: "周熠嘉、沈孙丰",
+                    fileName: "shumei-huanyingci",
+                    symbol: "person.2.fill"
+                ),
+                Article(
+                    title: "树莓社2024年国旗下讲话",
                     subtitle: "王嫣然、第六届组委会集体",
                     fileName: "raspberry-club-speech",
                     symbol: "mic.fill"
                 ),
                 Article(
-                    title: "守温度、传火种、向未来——在树莓社第八届社员大会上的工作报告",
+                    title: "树莓社第七届社长工作报告",
                     subtitle: "杨梓言社长",
                     fileName: "SMS-RC_C8_President_Report_2026",
-                    symbol: "text.page"
+                    symbol: "doc.text.fill"
                 ),
                 Article(
-                    title: "没有任何一帧，可以决定整部电影——树莓社致所有考生的一封信",
+                    title: "没有任何一帧可以决定整部电影",
                     subtitle: "陈雨馨社长",
                     fileName: "NoFrameDecidesMovie",
                     symbol: "envelope.fill"
