@@ -169,6 +169,15 @@ struct HomeNavigationView: View {
                 ToolbarItem(
                     placement: .topBarTrailing
                 ) {
+                    NavigationLink {
+                        AboutView()
+                    } label: {
+                        Image(systemName: "info.circle")
+                    }
+                }
+                ToolbarItem(
+                    placement: .topBarTrailing
+                ) {
                     Button {
                         showRegisterSheet = true
                     } label: {
@@ -280,16 +289,58 @@ struct ArticleListView: View {
                     symbol: "mic.fill"
                 ),
                 Article(
-                    title: "树莓社第七届社长工作报告",
-                    subtitle: "杨梓言社长",
-                    fileName: "SMS-RC_C8_President_Report_2026",
-                    symbol: "doc.text.fill"
+                    title: "关于保障创作者权益的倡议",
+                    subtitle: "王嫣然副社长",
+                    fileName: "creator-rights-initiative",
+                    symbol: "megaphone.fill"
                 ),
                 Article(
                     title: "没有任何一帧可以决定整部电影",
                     subtitle: "陈雨馨社长",
                     fileName: "NoFrameDecidesMovie",
                     symbol: "envelope.fill"
+                )
+            ]
+        ),
+        ArticleCategory(
+            name: "社长工作报告",
+            symbol: "doc.richtext.fill",
+            articles: [
+                Article(
+                    title: "第二届社员大会工作报告",
+                    subtitle: "刘恩岐社长",
+                    fileName: "report-2019-2nd-liuenqi",
+                    symbol: "doc.text"
+                ),
+                Article(
+                    title: "2021年上半年活动总结",
+                    subtitle: "朱奕社长",
+                    fileName: "report-2021-midyear-zhuyi",
+                    symbol: "doc.text"
+                ),
+                Article(
+                    title: "第五届社员大会工作报告",
+                    subtitle: "汪翊扬社长",
+                    fileName: "report-2023-5th-wangyiyang",
+                    symbol: "doc.text"
+                ),
+                Article(
+                    title: "第六届社员大会社长工作报告",
+                    subtitle: "李谦社长",
+                    fileName: "report-2023-6th-liqian",
+                    symbol: "doc.text"
+                ),
+                Article(
+                    title: "第六届组织委员会工作报告",
+                    subtitle: "王嫣然代理社长",
+                    fileName: "report-2024-6th-committee-wangyanran",
+                    symbol: "doc.text"
+                ),
+                Article(
+                    title: "第八届社员大会社长工作报告",
+                    subtitle: "杨梓言社长",
+                    fileName: "SMS-RC_C8_President_Report_2026",
+                    symbol: "doc.text"
                 )
             ]
         )
