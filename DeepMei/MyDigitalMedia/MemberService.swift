@@ -260,7 +260,7 @@ actor MemberService {
     }
 
     // MARK: Token 鉴权
-    private func getTenantAccessToken() async throws -> String {
+    func getTenantAccessToken() async throws -> String {
         if let cached = cachedToken, let exp = tokenExpiry, exp > Date().addingTimeInterval(60) {
             return cached
         }

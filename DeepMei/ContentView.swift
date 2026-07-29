@@ -11,6 +11,7 @@ import WebKit
 private enum MainTab: Hashable {
     case home
     case library
+    case activities
     case camera
     case mine
 }
@@ -39,7 +40,17 @@ struct ContentView: View {
                     )
                 }
                 .tag(MainTab.library)
-            // MARK: - 导演取景器 (树莓相机)
+            // MARK: - 活动
+           // ActivityView()
+              //  .tabItem {
+             //       Label(
+             //           "活动",
+            //            systemImage: "calendar"
+           //         )
+           //     }
+           //     .tag(MainTab.activities)
+            //MARK: - 导演取景器 (树莓相机)
+            /*
             DirectorCameraView()
                 .tabItem {
                     Label(
@@ -48,6 +59,17 @@ struct ContentView: View {
                     )
                 }
                 .tag(MainTab.camera)
+            */
+            // MARK: - 工作台
+            WorkbenchView()
+                .tabItem {
+                    Label(
+                        "工作台",
+                        systemImage: "square.grid.2x2.fill"
+                    )
+                }
+                .tag(MainTab.activities)
+            
             // MARK: - 树莓酱
             MyRaspberryView()
             .ignoresSafeArea()

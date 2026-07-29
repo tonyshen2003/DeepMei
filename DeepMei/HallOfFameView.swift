@@ -534,7 +534,27 @@ let allMembers: [HallOfFameMember] = [
     // 第七届
     HallOfFameMember(id: "yangziyan", name: "杨梓言", term: 7, role: "第七任社长", tags: ["全媒体矩阵","伟大完成论"], contribution: "建成全媒体传播矩阵（累计传播超 20 万次）。面对 AI 冲击提出\"伟大完成论\"，强调\"从单纯技术传授升华为创意火种的传递\"。", quote: "让那些转瞬即逝的声音可以被听见，让每一个创意都拥有落地生长的土壤。", grades: ["A","B","B","A","A","A"], archive: "《守温度、传火种、向未来》", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/yangziyan.webp"),
     HallOfFameMember(id: "luoanqi", name: "雒安琪", term: 7, role: "传媒中心负责人", tags: ["问道山下广播","抖音平台","传媒中心"], contribution: "运营《问道山下》广播节目。发起创建小红书账号，创立抖音账号，推动校园传媒业务创新与时代化改革。", quote: "", grades: ["B","B","A","B","C","A"], archive: "", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/luoanqi.webp"),
-    HallOfFameMember(id: "zhujingxuan", name: "朱璟煊", term: 7, role: "策划与宣传部 / 第八届副社长", tags: ["树莓酱 IP","品牌运营"], contribution: "主导\"树莓酱\"形象系统性迭代与 Q 版化开发，通过深耕周边文创，将社团文化成功转化为具象的视觉资产与文化符号。", quote: "", grades: ["C","B","A","B","C","B"], archive: "", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/zhujingxuan.webp"),
+    HallOfFameMember(id: "zhujingxuan",
+                     name: "朱璟煊",
+                     term: 7,
+                     role: "策划与宣传部 / 第八届副社长",
+                     tags: ["树莓酱 IP","品牌运营"],
+                     contribution: "主导\"树莓酱\"形象系统性迭代与 Q 版化开发，通过深耕周边文创，将社团文化成功转化为具象的视觉资产与文化符号。",
+                     quote: "",
+                     grades: ["C","B","A","B","C","B"],
+                     archive: "",
+                     photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/zhujingxuan.webp"),
+    
+    HallOfFameMember(id: "zhengchukun",
+        name: "郑楚琨",
+        term: 7,
+        role: "第八届副社长",
+        tags: ["文艺创作", "校园传媒"],
+        contribution:  "探索作品创意孵化机制，建立常态化创作交流。",
+        quote:  "",
+        grades: ["B", "A", "B", "A", "B", "B"],
+        archive: "",
+        photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/zhengchukun.webp"),
     
     // 第八届
     HallOfFameMember(id: "chenyuxin", name: "陈雨馨", term: 8, role: "第八任社长", tags: ["《寻找》主演","第八代核心"], contribution: "原创微电影《寻找》主演。面对\"技术过剩而产出不足\"的问题提出尖锐反思，推动社团回归影像记录本质。", quote:"为什么我们树莓的技术已经足够成熟，产出却没能跟上呢？ 当我们面对规则、面对既定，甚至于面对自己——你是否还有勇气转身，做出改变？你不需要立刻做出回答，而树莓也只愿你始终对世界保有好奇心——去记录，去创作，去热爱，去质疑，去思考。", grades: ["B","A","B","B","B","B"], archive: "", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/chenyuxin.webp")
