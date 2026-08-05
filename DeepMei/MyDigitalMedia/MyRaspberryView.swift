@@ -64,8 +64,14 @@ struct RaspberryMember: Identifiable, Equatable, Decodable {
     let totalHours: Double      // 统计时长
     let description: String     // 详细介绍
     let photoURLs: [String]     // 个人照片 URL 列表
-    var avatarURL: String? { photoURLs.first }
+    let avatarURLs: [String]    // 头像 URL 列表（飞书「头像」字段，Android 同款）
     let works: [WorkItem]       // 代表作品列表（图片或视频）
+
+    /// 头像：优先「头像」字段第一张，缺失时回退到个人照片第一张（与 Android 对齐）。
+    var avatarURL: String? {
+        avatarURLs.first(where: { !$0.isEmpty })
+            ?? photoURLs.first(where: { !$0.isEmpty })
+    }
     
     // 💡 格式化输出：提取入社年份 (如 "2018")
     var joinYearFormatted: String {
@@ -109,6 +115,7 @@ extension RaspberryMember {
         case totalHours = "统计时长 (社团活动记录表)"
         case description = "详细介绍"
         case avatarList = "个人照片"
+        case avatar = "头像"
         case ArtpicList = "代表作品"
     }
 
@@ -168,6 +175,16 @@ extension RaspberryMember {
             photoURLs = urls
         } else {
             photoURLs = []
+        }
+
+        // 5b. 处理头像（飞书「头像」字段，独立于个人照片）
+        if let avatars = try? container.decode([[String: DynamicCodingProperty]].self, forKey: .avatar) {
+            avatarURLs = avatars.compactMap { $0["tmp_url"]?.stringValue ?? $0["url"]?.stringValue }
+        } else if let avatarString = try? container.decode(String.self, forKey: .avatar),
+                  !avatarString.isEmpty {
+            avatarURLs = [avatarString]
+        } else {
+            avatarURLs = []
         }
         
         // 6. 处理作品（仅保留图片）

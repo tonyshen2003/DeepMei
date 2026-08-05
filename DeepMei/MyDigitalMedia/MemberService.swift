@@ -419,6 +419,7 @@ actor MemberService {
                 totalHours: fields["统计时长 (社团活动记录表)"]?.doubleValue ?? 0,
                 description: text("详细介绍"),
                 photoURLs: fields["个人照片"]?.imageURLs ?? [],
+                avatarURLs: fields["头像"]?.imageURLs ?? [],
                 works: fields["代表作品"]?.workItems ?? []
             )
         }

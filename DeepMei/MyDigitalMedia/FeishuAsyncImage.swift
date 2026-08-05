@@ -32,7 +32,7 @@ struct FeishuAsyncImage: View {
                 placeholderAvatar
             }
         }
-        .task {
+        .task(id: urlString) {
             // 视图出现时异步获取图片
             await loadImage()
         }
@@ -40,7 +40,9 @@ struct FeishuAsyncImage: View {
     
     // 异步加载逻辑
     private func loadImage() async {
-        guard let urlString = urlString, image == nil else { return }
+        // URL 变化（如切换到另一社员）时先清空旧图，避免残留上一人的头像
+        image = nil
+        guard let urlString = urlString else { return }
         
         isLoading = true
         do {
