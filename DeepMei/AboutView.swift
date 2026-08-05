@@ -48,25 +48,37 @@ struct AboutView: View {
 
             // MARK: - 功能入口
             Section {
-                Label {
-                    Text("隐私政策")
-                } icon: {
-                    Image(systemName: "hand.raised.fill")
-                        .foregroundStyle(.blue)
+                NavigationLink {
+                    MarkdownArticleView(fileName: "privacy-policy", title: "隐私政策")
+                } label: {
+                    Label {
+                        Text("隐私政策")
+                    } icon: {
+                        Image(systemName: "hand.raised.fill")
+                            .foregroundStyle(.blue)
+                    }
                 }
 
-                Label {
-                    Text("用户协议")
-                } icon: {
-                    Image(systemName: "doc.text.fill")
-                        .foregroundStyle(.orange)
+                NavigationLink {
+                    MarkdownArticleView(fileName: "user-agreement", title: "用户协议")
+                } label: {
+                    Label {
+                        Text("用户协议")
+                    } icon: {
+                        Image(systemName: "doc.text.fill")
+                            .foregroundStyle(.orange)
+                    }
                 }
 
-                Label {
-                    Text("开源许可")
-                } icon: {
-                    Image(systemName: "shippingbox.fill")
-                        .foregroundStyle(.purple)
+                NavigationLink {
+                    MarkdownArticleView(fileName: "open-source-licenses", title: "开源许可")
+                } label: {
+                    Label {
+                        Text("开源许可")
+                    } icon: {
+                        Image(systemName: "shippingbox.fill")
+                            .foregroundStyle(.purple)
+                    }
                 }
             } header: {
                 Text("法律信息")

@@ -456,6 +456,10 @@ struct ActionCard: View {
 struct WebView: UIViewRepresentable {
     let url: URL
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func makeUIView(
         context: Context
     ) -> WKWebView {
@@ -469,6 +473,7 @@ struct WebView: UIViewRepresentable {
             frame: .zero,
             configuration: config
         )
+        webView.navigationDelegate = context.coordinator
         // 缓存策略
         let request = URLRequest(
             url: url,
@@ -483,6 +488,28 @@ struct WebView: UIViewRepresentable {
         _ uiView: WKWebView,
         context: Context
     ) {
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard let targetURL = navigationAction.request.url else {
+                decisionHandler(.allow)
+                return
+            }
+
+            // 命中白名单的自定义 scheme：交给系统拉起对应 App，WebView 不再加载
+            if ExternalLinkPolicy.shouldOpenExternally(targetURL) {
+                UIApplication.shared.open(targetURL) { _ in }
+                decisionHandler(.cancel)
+                return
+            }
+
+            decisionHandler(.allow)
+        }
     }
 }
 

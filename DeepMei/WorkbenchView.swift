@@ -14,6 +14,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 // MARK: - 工作台主页
 
@@ -132,13 +133,15 @@ private struct EntryCard: View {
 
     var body: some View {
         switch item.target {
-        case .webView(let url, let title):
+        case .webView(let url, let title, let hideTopBar, let fullscreenLandscape):
             NavigationLink {
                 WebView(url: URL(string: url.contains("?") ? "\(url)&t=\(Date().timeIntervalSince1970)" : "\(url)?t=\(Date().timeIntervalSince1970)")!)
                     .ignoresSafeArea(edges: .bottom)
                     .navigationTitle(title)
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar(.hidden, for: .tabBar)
+                    .toolbar(hideTopBar ? .hidden : .visible, for: .navigationBar)
+                    .modifier(FullscreenLandscapeModifier(enabled: fullscreenLandscape))
             } label: {
                 CardContent(item: item, common: common)
             }
@@ -153,6 +156,40 @@ private struct EntryCard: View {
             }
             .buttonStyle(.plain)
         }
+    }
+}
+
+// MARK: - 全屏横屏模式（适合云游戏等网页）
+
+/// 按需强制横屏、隐藏系统栏并保持屏幕常亮；退出页面时全部还原。
+private struct FullscreenLandscapeModifier: ViewModifier {
+    let enabled: Bool
+
+    @State private var wasIdleTimerDisabled = false
+
+    func body(content: Content) -> some View {
+        content
+            .statusBarHidden(enabled)
+            .persistentSystemOverlays(enabled ? .hidden : .automatic)
+            .onAppear {
+                guard enabled else { return }
+                wasIdleTimerDisabled = UIApplication.shared.isIdleTimerDisabled
+                UIApplication.shared.isIdleTimerDisabled = true
+                requestOrientation(.landscape)
+            }
+            .onDisappear {
+                guard enabled else { return }
+                UIApplication.shared.isIdleTimerDisabled = wasIdleTimerDisabled
+                requestOrientation(.portrait)
+            }
+    }
+
+    /// 通过 UIWindowScene 请求旋转（iOS 16+）。
+    private func requestOrientation(_ orientation: UIInterfaceOrientationMask) {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }) else { return }
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: orientation)) { _ in }
     }
 }
 

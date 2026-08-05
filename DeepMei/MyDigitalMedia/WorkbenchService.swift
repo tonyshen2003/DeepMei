@@ -21,6 +21,8 @@
 //  | 文件名     | 文本     | 跳转类型含「文章」时填                               |
 //  | 图标       | 单选     | event / home / cloud / book / play / apps          |
 //  | 排序       | 数字     | 同组内升序排列（可留空，默认 0）                     |
+//  | 隐藏顶部栏 | 复选框   | 勾选后进入网页时隐藏应用顶部栏（适合全屏网页）         |
+//  | 全屏横屏   | 复选框   | 勾选后强制横屏并隐藏系统栏、保持屏幕常亮（适合云游戏） |
 //
 
 import Foundation
@@ -234,6 +236,8 @@ actor WorkbenchService {
         let common = fields.bool("常用")
         let iconKey = fields.text("图标").isEmpty ? "apps" : fields.text("图标")
         let sortValue = fields.int("排序")
+        let hideTopBar = fields.bool("隐藏顶部栏")
+        let fullscreenLandscape = fields.bool("全屏横屏")
 
         let url = fields.text("链接URL")
         let fileName = fields.text("文件名")
@@ -245,10 +249,20 @@ actor WorkbenchService {
             target = .markdown(fileName: fileName, title: title)
         } else if jumpType.contains("网页") {
             guard !url.isEmpty else { return nil }
-            target = .webView(url: url, title: title)
+            target = .webView(
+                url: url,
+                title: title,
+                hideTopBar: hideTopBar,
+                fullscreenLandscape: fullscreenLandscape
+            )
         } else {
             if !url.isEmpty {
-                target = .webView(url: url, title: title)
+                target = .webView(
+                    url: url,
+                    title: title,
+                    hideTopBar: hideTopBar,
+                    fullscreenLandscape: fullscreenLandscape
+                )
             } else if !fileName.isEmpty {
                 target = .markdown(fileName: fileName, title: title)
             } else {

@@ -16,7 +16,7 @@ import Foundation
 /// 入口点击后的跳转目标。用枚举关联值而非裸 URL，使数据层完全不关心导航实现。
 enum ActivityTarget: Hashable, Sendable {
     /// 打开网页（外部站点或内部页面，如签到 / 报名页）
-    case webView(url: String, title: String)
+    case webView(url: String, title: String, hideTopBar: Bool = false, fullscreenLandscape: Bool = false)
     /// 打开应用内 Markdown 文章（如活动须知、活动回顾），fileName 不含 .md 扩展名
     case markdown(fileName: String, title: String)
 }

@@ -18,6 +18,7 @@ struct MarkdownArticleView: View {
     }
 
     let fileName: String
+    var title: String? = nil
 
     @State private var loadState: LoadState = .loading
 
@@ -93,6 +94,9 @@ private extension MarkdownArticleView {
     
     // 动态计算页面标题
     var articleTitle: String {
+        if let title {
+            return title
+        }
         switch fileName {
         case "constitution":
             return "苏州中学树莓社章程"
