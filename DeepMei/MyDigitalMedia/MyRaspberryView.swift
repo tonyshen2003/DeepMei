@@ -803,8 +803,8 @@ struct DetailRow: View {
                 Spacer() // 💡 1. 加上 Spacer 撑开标题行宽度
             }
 
-            // 内容文本（可复制时行尾显示复制按钮，图标对齐 Apple 规范）
-            HStack(alignment: .top, spacing: 8) {
+            // 内容文本（可复制时行尾显示复制按钮；按钮高度与文本行一致，避免撑高行距）
+            HStack(alignment: .center, spacing: 8) {
                 Text(content)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -816,7 +816,7 @@ struct DetailRow: View {
                         Image(systemName: "doc.on.doc")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .frame(width: 28, height: 28)
+                            .frame(width: 22, height: 22)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -846,7 +846,7 @@ struct WorkGridSection: View {
     }
 
     private var supportedWorks: [WorkItem] {
-        works.filter { $0.type != .unsupported }
+        works.filter { $0.type != .unsupported && !$0.url.isEmpty }
     }
     private var unsupportedCount: Int {
         works.count - supportedWorks.count
@@ -910,28 +910,6 @@ struct ImageWorkCard: View {
             .frame(height: 150)
             .clipped()
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(alignment: .topTrailing) {
-                // 全屏查看指示
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.white)
-                    .padding(5)
-                    .background(.ultraThinMaterial.opacity(0.9), in: Circle())
-                    .padding(8)
-            }
-            .overlay(alignment: .bottomLeading) {
-                // 文件名标签
-                if !work.fileName.isEmpty {
-                    Text(work.fileName)
-                        .font(.caption2)
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .padding(8)
-                }
-            }
             .contentShape(Rectangle())
             .onTapGesture {
                 onTap()
