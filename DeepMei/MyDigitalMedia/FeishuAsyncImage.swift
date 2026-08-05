@@ -10,6 +10,14 @@ import SwiftUI
 struct FeishuAsyncImage: View {
     let urlString: String?
     let placeholderName: String // 用于显示首字母占位符
+
+    /// 进程内共享的内存图片缓存（URL 作 key）：
+    /// 切 tab / 重复查询同一社员时直接命中，避免重复发起网络下载。
+    private static let imageCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 300
+        return cache
+    }()
     
     @State private var image: UIImage? = nil
     @State private var isLoading = false
@@ -40,14 +48,30 @@ struct FeishuAsyncImage: View {
     
     // 异步加载逻辑
     private func loadImage() async {
-        // URL 变化（如切换到另一社员）时先清空旧图，避免残留上一人的头像
-        image = nil
-        guard let urlString = urlString else { return }
+        guard let urlString = urlString else {
+            // 无 URL：确保显示占位符
+            image = nil
+            return
+        }
+
+        // 第一层：内存缓存命中 → 直接显示，跳过网络请求
+        if let cached = Self.imageCache.object(forKey: urlString as NSString) {
+            image = cached
+            return
+        }
+
+        // URL 变化（如切换到另一社员）时先清空旧图，避免残留上一人的头像；
+        // 同一 URL 且已有图则直接复用，避免切 tab 回来重复加载
+        if image != nil {
+            image = nil
+        }
         
         isLoading = true
         do {
             // 调用 MemberService 的下载方法
             if let downloadedImage = try await MemberService.shared.downloadTempMedia(from: urlString){
+                // 第二层：下载成功后写入内存缓存，供后续秒开
+                Self.imageCache.setObject(downloadedImage, forKey: urlString as NSString)
                 // 确保 UI 更新在主线程
                 await MainActor.run {
                     self.image = downloadedImage
