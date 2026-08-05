@@ -421,8 +421,7 @@ struct MemberProfileCard: View {
             // 2. 身份头部区
             HStack(spacing: 16) {
                 if let avatarURLString = member.avatarURL, URL(string: avatarURLString) != nil {
-                    FeishuAsyncImage(urlString: member.avatarURL, placeholderName: member.name)
-                        .scaledToFill()
+                    FeishuAsyncImage(urlString: member.avatarURL, placeholderName: member.name, contentMode: .fill)
                         .frame(width: 80, height: 80)
                         .clipShape(Circle())
                         .overlay(Circle().stroke(Color.primary.opacity(0.1), lineWidth: 1))
@@ -609,10 +608,8 @@ struct PhotoCarouselView: View {
         ZStack(alignment: .bottomTrailing) {
             TabView(selection: $selection) {
                 ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
-                    FeishuAsyncImage(urlString: url, placeholderName: "照片")
-                        .scaledToFill()
+                    FeishuAsyncImage(urlString: url, placeholderName: "照片", contentMode: .fill)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
                         .contentShape(Rectangle())        // 保证整个区域可点击
                         .onTapGesture { viewerPresented = true }
                         .tag(index)
@@ -705,8 +702,7 @@ private struct ZoomableImageView: View {
     @State private var lastOffset: CGSize = .zero
 
     var body: some View {
-        FeishuAsyncImage(urlString: url, placeholderName: "加载中…")
-            .scaledToFit()
+        FeishuAsyncImage(urlString: url, placeholderName: "加载中…", contentMode: .fit)
             .scaleEffect(scale)
             .offset(offset)
             // 双指缩放
@@ -904,11 +900,9 @@ struct ImageWorkCard: View {
     let onTap: () -> Void
 
     var body: some View {
-        FeishuAsyncImage(urlString: work.url, placeholderName: "作品")
-            .scaledToFill()
+        FeishuAsyncImage(urlString: work.url, placeholderName: "作品", contentMode: .fill)
             .frame(maxWidth: .infinity)
             .frame(height: 150)
-            .clipped()
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .contentShape(Rectangle())
             .onTapGesture {

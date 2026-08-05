@@ -10,6 +10,7 @@ import SwiftUI
 struct FeishuAsyncImage: View {
     let urlString: String?
     let placeholderName: String // 用于显示首字母占位符
+    var contentMode: ContentMode = .fill
 
     /// 进程内共享的内存图片缓存（URL 作 key）：
     /// 切 tab / 重复查询同一社员时直接命中，避免重复发起网络下载。
@@ -28,7 +29,9 @@ struct FeishuAsyncImage: View {
                 // 加载成功，显示真实图片
                 Image(uiImage: uiImage)
                     .resizable()
-                    .scaledToFill()
+                    .aspectRatio(contentMode: contentMode)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
             } else if isLoading {
                 // 加载中显示进度条
                 ProgressView()
@@ -40,6 +43,7 @@ struct FeishuAsyncImage: View {
                 placeholderAvatar
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: urlString) {
             // 视图出现时异步获取图片
             await loadImage()
