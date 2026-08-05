@@ -12,7 +12,6 @@ private enum MainTab: Hashable {
     case home
     case library
     case activities
-    case camera
     case mine
 }
 
@@ -49,17 +48,6 @@ struct ContentView: View {
            //         )
            //     }
            //     .tag(MainTab.activities)
-            //MARK: - 导演取景器 (树莓相机)
-            /*
-            DirectorCameraView()
-                .tabItem {
-                    Label(
-                        "取景器",
-                        systemImage: "camera.viewfinder"
-                    )
-                }
-                .tag(MainTab.camera)
-            */
             // MARK: - 工作台
             WorkbenchView()
                 .tabItem {
@@ -313,19 +301,19 @@ struct ArticleListView: View {
                     symbol: "doc.text"
                 ),
                 Article(
-                    title: "2021年上半年活动总结",
+                    title: "第三届社长2021年上半年活动总结报告",
                     subtitle: "朱奕社长",
                     fileName: "report-2021-midyear-zhuyi",
                     symbol: "doc.text"
                 ),
                 Article(
-                    title: "第五届社员大会工作报告",
+                    title: "第四届社长工作报告",
                     subtitle: "汪翊扬社长",
                     fileName: "report-2023-5th-wangyiyang",
                     symbol: "doc.text"
                 ),
                 Article(
-                    title: "第六届社员大会社长工作报告",
+                    title: "第五届社长工作报告",
                     subtitle: "李谦社长",
                     fileName: "report-2023-6th-liqian",
                     symbol: "doc.text"
@@ -337,7 +325,7 @@ struct ArticleListView: View {
                     symbol: "doc.text"
                 ),
                 Article(
-                    title: "第八届社员大会社长工作报告",
+                    title: "第七届社长工作报告",
                     subtitle: "杨梓言社长",
                     fileName: "SMS-RC_C8_President_Report_2026",
                     symbol: "doc.text"
