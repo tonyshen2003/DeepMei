@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import UIKit
 
 // MARK: - 1. 数据模型定义
 
@@ -202,6 +203,8 @@ struct MyRaspberryView: View {
     @State private var isSearching: Bool = false
     @State private var notFound: Bool = false
     @State private var serviceError: String?
+    @State private var isRefreshingSnapshot = false
+    @State private var refreshMessage: String?
     @FocusState private var isFocused: Bool
 
     var body: some View {
@@ -274,6 +277,20 @@ struct MyRaspberryView: View {
                     performSearch()
                 }
                 .toolbar {
+                    // 手动刷新社员资料快照
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            refreshSnapshot()
+                        } label: {
+                            if isRefreshingSnapshot {
+                                ProgressView()
+                            } else {
+                                Label("刷新社员资料", systemImage: "arrow.clockwise")
+                            }
+                        }
+                        .disabled(isRefreshingSnapshot)
+                    }
+
                     if member != nil {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button {
@@ -282,6 +299,18 @@ struct MyRaspberryView: View {
                                 Label("重新查询", systemImage: "arrow.counterclockwise")
                             }
                         }
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    if let refreshMessage {
+                        Text(refreshMessage)
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(.black.opacity(0.75), in: Capsule())
+                            .padding(.bottom, 24)
+                            .transition(.opacity)
                     }
                 }
             }
@@ -305,7 +334,17 @@ struct MyRaspberryView: View {
         let query = searchText
         Task {
             do {
-                let result = try await MemberService.shared.searchMember(byNameOrCodeOrAlias: query)
+                // 快照缓存优先（秒开、离线可用）；未命中或没有快照时回退到飞书实时查询
+                let result: RaspberryMember?
+                if let cached = await MemberSnapshotCache.shared.findMember(query: query) {
+                    result = cached
+                    // 快照过期：先用旧数据展示，后台静默刷新
+                    if !(await MemberSnapshotCache.shared.isFresh()) {
+                        Task { _ = await MemberSnapshotCache.shared.refresh() }
+                    }
+                } else {
+                    result = try await MemberService.shared.searchMember(byNameOrCodeOrAlias: query)
+                }
                 await MainActor.run {
                     isSearching = false
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
@@ -324,11 +363,33 @@ struct MyRaspberryView: View {
             }
         }
     }
+
+    /// 手动刷新社员资料快照，并给出轻量反馈。
+    private func refreshSnapshot() {
+        guard !isRefreshingSnapshot else { return }
+        isRefreshingSnapshot = true
+        Task {
+            let ok = await MemberSnapshotCache.shared.refresh()
+            await MainActor.run {
+                isRefreshingSnapshot = false
+                withAnimation(.easeOut(duration: 0.2)) {
+                    refreshMessage = ok ? "社员资料已更新" : "刷新失败，请检查网络"
+                }
+                Task {
+                    try? await Task.sleep(nanoseconds: 1_800_000_000)
+                    withAnimation(.easeIn(duration: 0.25)) {
+                        refreshMessage = nil
+                    }
+                }
+            }
+        }
+    }
 }
 
 // MARK: - 3. 社员档案卡片组件
 struct MemberProfileCard: View {
     let member: RaspberryMember
+    @State private var copyFeedback: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -362,10 +423,16 @@ struct MemberProfileCard: View {
                                 .font(.subheadline.weight(.medium))
                                 .foregroundStyle(.secondary)
                         }
-                        Image(systemName: "checkmark.seal.fill")
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, Color.accentColor)
-                            .font(.subheadline)
+                        // 评级徽章：按「社员评级」展示对应图标与颜色（无评级或脏数据不显示）
+                        if let badge = RatingBadge(rawValue: member.rating) {
+                            Image(systemName: badge.systemImage)
+                                .symbolRenderingMode(.monochrome)
+                                .foregroundStyle(.white)
+                                .font(.caption)
+                                .frame(width: 20, height: 20)
+                                .background(badge.color, in: Circle())
+                                .accessibilityLabel(badge.accessibilityLabel)
+                        }
                     }
                     
                     Text("\(member.generation) \(member.clazz) · \(member.department)")
@@ -409,7 +476,16 @@ struct MemberProfileCard: View {
                     DetailRow(icon: "birthday.cake.fill", title: "生日", content: member.fullBirthdayFormatted, tint: .pink)
                 }
                 if !member.contactQQ.isEmpty {
-                    DetailRow(icon: "bubble.left.and.bubble.right.fill", title: "QQ", content: member.contactQQ, tint: .blue)
+                    DetailRow(
+                        icon: "bubble.left.and.bubble.right.fill",
+                        title: "QQ",
+                        content: member.contactQQ,
+                        tint: .blue,
+                        onCopy: {
+                            UIPasteboard.general.string = member.contactQQ
+                            showCopyFeedback("QQ 已复制")
+                        }
+                    )
                 }
                 if !member.roles.isEmpty {
                     DetailRow(icon: "briefcase.fill", title: "社团职务", content: member.roles, tint: .orange)
@@ -439,6 +515,30 @@ struct MemberProfileCard: View {
         .background(Color(uiColor: .secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: Color.black.opacity(0.04), radius: 10, x: 0, y: 4)
+        .overlay(alignment: .bottom) {
+            if let copyFeedback {
+                Text(copyFeedback)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.75), in: Capsule())
+                    .padding(.bottom, 12)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private func showCopyFeedback(_ message: String) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            copyFeedback = message
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            withAnimation(.easeIn(duration: 0.25)) {
+                copyFeedback = nil
+            }
+        }
     }
 
     private var placeholderAvatar: some View {
@@ -454,10 +554,40 @@ struct MemberProfileCard: View {
     }
 }
 
+// MARK: - 评级徽章
+
+/// 把「社员评级」映射为徽章（对标 Android ratingBadge）；空值 / 脏数据不显示。
+private struct RatingBadge {
+    let systemImage: String
+    let color: Color
+    let accessibilityLabel: String
+
+    init?(rawValue: String) {
+        switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines) {
+        case "社团领袖":
+            self.init(systemImage: "crown.fill", color: Color(red: 0.79, green: 0.64, blue: 0.15), accessibilityLabel: "社团领袖")
+        case "核心社员":
+            self.init(systemImage: "checkmark.seal.fill", color: Color(red: 0.58, green: 0.17, blue: 0.22), accessibilityLabel: "核心社员")
+        case "活跃社员":
+            self.init(systemImage: "sparkles", color: Color(red: 0.27, green: 0.37, blue: 0.55), accessibilityLabel: "活跃社员")
+        case "普通社员":
+            self.init(systemImage: "person.fill", color: Color(red: 0.42, green: 0.45, blue: 0.50), accessibilityLabel: "普通社员")
+        default:
+            return nil
+        }
+    }
+
+    private init(systemImage: String, color: Color, accessibilityLabel: String) {
+        self.systemImage = systemImage
+        self.color = color
+        self.accessibilityLabel = accessibilityLabel
+    }
+}
+
 struct PhotoCarouselView: View {
     let urls: [String]
     @State private var selection = 0
-    @State private var selectedImage: IdentifiableImage?
+    @State private var viewerPresented = false
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             TabView(selection: $selection) {
@@ -467,7 +597,7 @@ struct PhotoCarouselView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipped()
                         .contentShape(Rectangle())        // 保证整个区域可点击
-                        .onTapGesture {selectedImage = IdentifiableImage(url: url)}
+                        .onTapGesture { viewerPresented = true }
                         .tag(index)
                 }
             }
@@ -482,92 +612,126 @@ struct PhotoCarouselView: View {
                     .padding(.horizontal, 8)
                     .background(.ultraThinMaterial)
                     .clipShape(Capsule())
-                    .padding(10)
+                .padding(10)
             }
         }
-        .fullScreenCover(item: $selectedImage) { image in
-            ImageViewer(url: image.url)
+        .fullScreenCover(isPresented: $viewerPresented) {
+            ImageViewer(urls: urls, initialIndex: selection)
         }
     }
 }
-    private struct IdentifiableImage: Identifiable {
-        let id = UUID()
-        let url: String
+
+// MARK: - 全屏图片查看器（支持多图左右滑动切换）
+
+struct ImageViewer: View {
+    let urls: [String]
+    @State private var selection: Int
+    @Environment(\.dismiss) var dismiss
+
+    init(urls: [String], initialIndex: Int = 0) {
+        self.urls = urls
+        _selection = State(initialValue: min(max(initialIndex, 0), max(urls.count - 1, 0)))
     }
 
-    struct ImageViewer: View {
-        let url: String
-        @Environment(\.dismiss) var dismiss
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-        @State private var scale: CGFloat = 1
-        @State private var lastScale: CGFloat = 1
-        @State private var offset: CGSize = .zero
-        @State private var lastOffset: CGSize = .zero
-
-        var body: some View {
-            ZStack {
-                Color.black.ignoresSafeArea()
-
-                FeishuAsyncImage(urlString: url, placeholderName: "加载中…")
-                    .scaledToFit()
-                    .scaleEffect(scale)
-                    .offset(offset)
-                    // 双指缩放
-                    .gesture(
-                        MagnificationGesture()
-                            .onChanged { value in
-                                let delta = value / lastScale
-                                lastScale = value
-                                scale = min(max(scale * delta, 0.5), 5.0)
-                            }
-                            .onEnded { _ in
-                                lastScale = 1
-                            }
-                    )
-                    // 单指拖拽（仅在放大时生效）
-                    .simultaneousGesture(
-                        DragGesture()
-                            .onChanged { value in
-                                offset = CGSize(
-                                    width: lastOffset.width + value.translation.width,
-                                    height: lastOffset.height + value.translation.height
-                                )
-                            }
-                            .onEnded { _ in
-                                lastOffset = offset
-                            }
-                    )
-                    // 双击放大/还原
-                    .onTapGesture(count: 2) {
-                        withAnimation(.spring(response: 0.3)) {
-                            if scale > 1 {
-                                scale = 1
-                                offset = .zero
-                                lastOffset = .zero
-                            } else {
-                                scale = 2.5
-                            }
-                        }
-                    }
-
-                // 关闭按钮
-                VStack {
-                    HStack {
-                        Spacer()
-                        Button {
-                            dismiss()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.largeTitle)
-                                .foregroundColor(.white)
-                                .padding()
-                        }
-                    }
-                    Spacer()
+            TabView(selection: $selection) {
+                ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
+                    ZoomableImageView(url: url)
+                        .tag(index)
                 }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+
+            // 页码指示器（多图时显示）
+            if urls.count > 1 {
+                Text("\(selection + 1) / \(urls.count)")
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundColor(.white)
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 10)
+                    .background(.black.opacity(0.5), in: Capsule())
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 28)
+            }
+
+            // 关闭按钮
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.largeTitle)
+                            .foregroundColor(.white)
+                            .padding()
+                    }
+                    .accessibilityLabel("关闭")
+                }
+                Spacer()
             }
         }
     }
+}
+
+/// 单张图片查看：黑底、双指缩放、放大后拖拽、双击放大/还原。
+private struct ZoomableImageView: View {
+    let url: String
+
+    @State private var scale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    var body: some View {
+        FeishuAsyncImage(urlString: url, placeholderName: "加载中…")
+            .scaledToFit()
+            .scaleEffect(scale)
+            .offset(offset)
+            // 双指缩放
+            .gesture(
+                MagnificationGesture()
+                    .onChanged { value in
+                        let delta = value / lastScale
+                        lastScale = value
+                        scale = min(max(scale * delta, 0.5), 5.0)
+                    }
+                    .onEnded { _ in
+                        lastScale = 1
+                    }
+            )
+            // 单指拖拽（仅在放大时生效）
+            .simultaneousGesture(
+                DragGesture()
+                    .onChanged { value in
+                        guard scale > 1 else { return }
+                        offset = CGSize(
+                            width: lastOffset.width + value.translation.width,
+                            height: lastOffset.height + value.translation.height
+                        )
+                    }
+                    .onEnded { _ in
+                        lastOffset = offset
+                    }
+            )
+            // 双击放大/还原
+            .onTapGesture(count: 2) {
+                withAnimation(.spring(response: 0.3)) {
+                    if scale > 1 {
+                        scale = 1
+                        offset = .zero
+                        lastOffset = .zero
+                    } else {
+                        scale = 2.5
+                    }
+                }
+            }
+    }
+}
     
     
 // MARK: - 4. 辅助 UI 组件
@@ -604,6 +768,7 @@ struct DetailRow: View {
     let title: String
     let content: String
     let tint: Color
+    var onCopy: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -621,12 +786,27 @@ struct DetailRow: View {
                 Spacer() // 💡 1. 加上 Spacer 撑开标题行宽度
             }
 
-            // 内容文本
-            Text(content)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineSpacing(4)
-                .padding(.leading, 28)
+            // 内容文本（可复制时行尾显示复制按钮，图标对齐 Apple 规范）
+            HStack(alignment: .top, spacing: 8) {
+                Text(content)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let onCopy {
+                    Button(action: onCopy) {
+                        Image(systemName: "doc.on.doc")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("复制\(title)")
+                }
+            }
+            .padding(.leading, 28)
         }
         // 💡 2. 核心修正：强制该组件占满父容器宽度，并统一靠左对齐
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -638,6 +818,8 @@ struct DetailRow: View {
 // MARK: - 5. 代表作品集组件
 struct WorkGridSection: View {
     let works: [WorkItem]
+    @State private var viewerPresented = false
+    @State private var selectedIndex = 0
 
     // 1 张图时全宽单列，2 张及以上用 2 列网格
     private var columns: [GridItem] {
@@ -672,8 +854,11 @@ struct WorkGridSection: View {
 
             // 作品网格
             LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(supportedWorks) { work in
-                    ImageWorkCard(work: work)
+                ForEach(Array(supportedWorks.enumerated()), id: \.element.id) { index, work in
+                    ImageWorkCard(work: work) {
+                        selectedIndex = index
+                        viewerPresented = true
+                    }
                 }
             }
 
@@ -691,12 +876,15 @@ struct WorkGridSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
+        .fullScreenCover(isPresented: $viewerPresented) {
+            ImageViewer(urls: supportedWorks.map(\.url), initialIndex: selectedIndex)
+        }
     }
 }
 
 struct ImageWorkCard: View {
     let work: WorkItem
-    @State private var selectedImage: IdentifiableImage?
+    let onTap: () -> Void
 
     var body: some View {
         FeishuAsyncImage(urlString: work.url, placeholderName: "作品")
@@ -729,10 +917,7 @@ struct ImageWorkCard: View {
             }
             .contentShape(Rectangle())
             .onTapGesture {
-                selectedImage = IdentifiableImage(url: work.url)
-            }
-            .fullScreenCover(item: $selectedImage) { image in
-                ImageViewer(url: image.url)
+                onTap()
             }
     }
 }

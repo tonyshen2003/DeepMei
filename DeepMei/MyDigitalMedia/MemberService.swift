@@ -80,13 +80,25 @@ private struct DriveTmpDownloadResponse: Decodable, Sendable {
 }
 
 // MARK: - 飞书字段值通用解码
-private enum LarkValue: Decodable, Sendable {
+enum LarkValue: Decodable, Encodable, Sendable {
     case string(String)
     case double(Double)
     case int(Int)
     case array([LarkValue])
     case object([String: LarkValue])
     case null
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let v): try container.encode(v)
+        case .double(let v): try container.encode(v)
+        case .int(let v): try container.encode(v)
+        case .array(let arr): try container.encode(arr)
+        case .object(let dict): try container.encode(dict)
+        case .null: try container.encodeNil()
+        }
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
@@ -348,7 +360,7 @@ actor MemberService {
     }
 
     // MARK: 字段映射（完全匹配实测数据表头）
-    @MainActor private static func mapRecord(fields: [String: LarkValue]) -> RaspberryMember? {
+    @MainActor static func mapRecord(fields: [String: LarkValue]) -> RaspberryMember? {
         
         func text(_ key: String) -> String {
             (fields[key]?.flattenedText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -410,4 +422,125 @@ actor MemberService {
                 works: fields["代表作品"]?.workItems ?? []
             )
         }
+}
+
+// MARK: - 社员全量快照（Worker /api/members/full）
+
+/// 与 Android 版 MemberFullSnapshot 对应的全量快照响应。
+private struct MemberFullSnapshot: Codable, Sendable {
+    let updatedAt: Int64
+    let items: [MemberSnapshotItem]
+}
+
+private struct MemberSnapshotItem: Codable, Sendable {
+    let recordId: String
+    let fields: [String: LarkValue]
+
+    enum CodingKeys: String, CodingKey {
+        case recordId
+        case fields
+    }
+}
+
+/// 本地持久化的快照封装（保存拉取时间，用于判断 24h 新鲜度）。
+private struct StoredMemberSnapshot: Codable, Sendable {
+    let savedAt: Date
+    let snapshot: MemberFullSnapshot
+}
+
+/// 社员资料本地快照缓存（与 Android MemberSnapshotCache 对齐）：
+/// - 查询优先命中本地快照，秒开、离线可用；
+/// - 快照超过 24h 视为过期，查询时后台静默刷新；
+/// - 也提供手动刷新（我的树莓右上角按钮）。
+actor MemberSnapshotCache {
+    static let shared = MemberSnapshotCache()
+
+    private let fileName = "member_snapshot.json"
+    private let ttl: TimeInterval = 24 * 60 * 60
+    private var memory: StoredMemberSnapshot?
+
+    private var fileURL: URL {
+        let directory = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first ?? FileManager.default.temporaryDirectory
+        return directory.appendingPathComponent(fileName)
+    }
+
+    /// 拉取最新快照并写盘；成功返回 true。
+    func refresh() async -> Bool {
+        guard let snapshot = await MemberSnapshotService.shared.fetchFullSnapshot() else {
+            return false
+        }
+        let stored = StoredMemberSnapshot(savedAt: Date(), snapshot: snapshot)
+        memory = stored
+        do {
+            let data = try JSONEncoder().encode(stored)
+            try data.write(to: fileURL, options: .atomic)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// 读取快照（内存优先，进程重启后读文件）。
+    fileprivate func load() async -> StoredMemberSnapshot? {
+        if let memory { return memory }
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        guard let stored = try? JSONDecoder().decode(StoredMemberSnapshot.self, from: data) else {
+            return nil
+        }
+        memory = stored
+        return stored
+    }
+
+    /// 快照是否在新鲜期内（24h）。
+    func isFresh() async -> Bool {
+        guard let stored = await load() else { return false }
+        return Date().timeIntervalSince(stored.savedAt) <= ttl
+    }
+
+    /// 按姓名/别名/编号/识别码/认读码/序号在快照中查找社员。
+    func findMember(query: String) async -> RaspberryMember? {
+        guard let stored = await load() else { return nil }
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return nil }
+
+        let keys = [
+            "姓名", "别名", "社员编号", "社员识别码",
+            "社员身份编码（认读码）", "社员序号"
+        ]
+        guard let item = stored.snapshot.items.first(where: { item in
+            keys.contains { key in
+                item.fields[key]?.flattenedText.localizedCaseInsensitiveContains(q) ?? false
+            }
+        }) else { return nil }
+
+        return await MainActor.run {
+            MemberService.mapRecord(fields: item.fields)
+        }
+    }
+}
+
+/// 全量社员快照数据层：对接 Worker GET /api/members/full（与 Android 共用同一接口）。
+private struct MemberSnapshotService {
+    static let shared = MemberSnapshotService()
+
+    private let baseURL = URL(string: "https://nfc.raspjam.com")!
+
+    func fetchFullSnapshot() async -> MemberFullSnapshot? {
+        let url = baseURL.appendingPathComponent("/api/members/full")
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 30
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                return nil
+            }
+            return try? JSONDecoder().decode(MemberFullSnapshot.self, from: data)
+        } catch {
+            return nil
+        }
+    }
 }
