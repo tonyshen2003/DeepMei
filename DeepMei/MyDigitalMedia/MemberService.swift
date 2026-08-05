@@ -22,7 +22,7 @@ enum MemberServiceError: Error, LocalizedError {
 }
 
 // MARK: - 飞书 API 响应模型
-private struct LarkTokenResponse: Decodable, Sendable {
+private struct LarkTokenResponse: Sendable {
     let code: Int
     let msg: String
     let tenantAccessToken: String
@@ -32,13 +32,14 @@ private struct LarkTokenResponse: Decodable, Sendable {
         case tenantAccessToken = "tenant_access_token"
     }
 }
+nonisolated extension LarkTokenResponse: Decodable {}
 
-private struct LarkRecordListResponse: Decodable, Sendable {
+private struct LarkRecordListResponse: Sendable {
     let code: Int
     let msg: String
     let data: DataPayload?
 
-    struct DataPayload: Decodable, Sendable {
+    struct DataPayload: Sendable {
         let items: [Item]?
         let pageToken: String?
         let hasMore: Bool?
@@ -50,17 +51,20 @@ private struct LarkRecordListResponse: Decodable, Sendable {
         }
     }
 
-    struct Item: Decodable, Sendable {
+    struct Item: Sendable {
         let fields: [String: LarkValue]
     }
 }
+nonisolated extension LarkRecordListResponse.DataPayload: Decodable {}
+nonisolated extension LarkRecordListResponse.Item: Decodable {}
+nonisolated extension LarkRecordListResponse: Decodable {}
 
-private struct DriveTmpDownloadResponse: Decodable, Sendable {
+private struct DriveTmpDownloadResponse: Sendable {
     let code: Int
     let msg: String
     let data: DataPayload?
 
-    struct DataPayload: Decodable, Sendable {
+    struct DataPayload: Sendable {
         let tmpDownloadURLs: [TmpDownloadURL]?
 
         enum CodingKeys: String, CodingKey {
@@ -68,7 +72,7 @@ private struct DriveTmpDownloadResponse: Decodable, Sendable {
         }
     }
 
-    struct TmpDownloadURL: Decodable, Sendable {
+    struct TmpDownloadURL: Sendable {
         let fileToken: String?
         let tmpDownloadURL: String?
 
@@ -78,9 +82,12 @@ private struct DriveTmpDownloadResponse: Decodable, Sendable {
         }
     }
 }
+nonisolated extension DriveTmpDownloadResponse.DataPayload: Decodable {}
+nonisolated extension DriveTmpDownloadResponse.TmpDownloadURL: Decodable {}
+nonisolated extension DriveTmpDownloadResponse: Decodable {}
 
 // MARK: - 飞书字段值通用解码
-enum LarkValue: Decodable, Encodable, Sendable {
+enum LarkValue: Sendable {
     case string(String)
     case double(Double)
     case int(Int)
@@ -203,6 +210,8 @@ enum LarkValue: Decodable, Encodable, Sendable {
         }
     }
 }
+nonisolated extension LarkValue: Decodable {}
+nonisolated extension LarkValue: Encodable {}
 
 // MARK: - 飞书社员数据服务
 actor MemberService {
@@ -428,12 +437,14 @@ actor MemberService {
 // MARK: - 社员全量快照（Worker /api/members/full）
 
 /// 与 Android 版 MemberFullSnapshot 对应的全量快照响应。
-private struct MemberFullSnapshot: Codable, Sendable {
+private struct MemberFullSnapshot: Sendable {
     let updatedAt: Int64
     let items: [MemberSnapshotItem]
 }
+nonisolated extension MemberFullSnapshot: Decodable {}
+nonisolated extension MemberFullSnapshot: Encodable {}
 
-private struct MemberSnapshotItem: Codable, Sendable {
+private struct MemberSnapshotItem: Sendable {
     let recordId: String
     let fields: [String: LarkValue]
 
@@ -442,12 +453,16 @@ private struct MemberSnapshotItem: Codable, Sendable {
         case fields
     }
 }
+nonisolated extension MemberSnapshotItem: Decodable {}
+nonisolated extension MemberSnapshotItem: Encodable {}
 
 /// 本地持久化的快照封装（保存拉取时间，用于判断 24h 新鲜度）。
-private struct StoredMemberSnapshot: Codable, Sendable {
+private struct StoredMemberSnapshot: Sendable {
     let savedAt: Date
     let snapshot: MemberFullSnapshot
 }
+nonisolated extension StoredMemberSnapshot: Decodable {}
+nonisolated extension StoredMemberSnapshot: Encodable {}
 
 /// 社员资料本地快照缓存（与 Android MemberSnapshotCache 对齐）：
 /// - 查询优先命中本地快照，秒开、离线可用；
