@@ -422,6 +422,7 @@ actor MemberService {
                 name: name,
                 alias: alias,
                 idCode: text("社员编号"),
+                memberCode: text("社员识别码"),
                 generation: text("年级"),
                 clazz: text("班级（分班后）"),
                 Birthday:finalBirthday,

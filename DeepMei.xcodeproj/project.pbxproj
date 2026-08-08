@@ -11,6 +11,16 @@
 		BBA2E701301263310087BD02 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = BBA2E700301263310087BD02 /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		AAAA0000000000000000000E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BBC083BC301175F700477523 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AAAA00000000000000000003;
+			remoteInfo = DeepMeiWatch;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXCopyFilesBuildPhase section */
 		AAAA0000000000000000000B /* Embed Watch Content */ = {
 			isa = PBXCopyFilesBuildPhase;
@@ -20,7 +30,6 @@
 				AAAA0000000000000000000A /* DeepMeiWatch.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
-			runOnlyForDeploymentPostprocessing = 1;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
@@ -130,6 +139,9 @@
 			);
 			buildRules = (
 			);
+			dependencies = (
+				AAAA0000000000000000000F /* PBXTargetDependency */,
+			);
 			fileSystemSynchronizedGroups = (
 				BBC083C6301175F700477523 /* DeepMei */,
 			);
@@ -207,6 +219,14 @@
 			);
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AAAA0000000000000000000F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AAAA00000000000000000003 /* DeepMeiWatch */;
+			targetProxy = AAAA0000000000000000000E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AAAA00000000000000000007 /* Debug configuration for PBXNativeTarget "DeepMeiWatch" */ = {

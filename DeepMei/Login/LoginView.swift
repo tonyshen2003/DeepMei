@@ -134,7 +134,14 @@ struct LoginView: View {
                         LoginManager.shared.login(
                             name: member.name,
                             idCode: member.idCode,
-                            avatarUrl: member.avatarURL ?? ""
+                            memberCode: member.memberCode,
+                            avatarUrl: member.avatarURL ?? "",
+                            alias: member.alias,
+                            generation: member.generation,
+                            className: member.clazz,
+                            department: member.department,
+                            position: member.roles,
+                            rating: member.rating
                         )
                         await recordLoginWithLocation(member)
                         dismiss()

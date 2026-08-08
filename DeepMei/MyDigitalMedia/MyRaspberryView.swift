@@ -48,6 +48,7 @@ struct RaspberryMember: Identifiable, Equatable, Decodable {
     let name: String            // 姓名
     let alias: String
     let idCode: String          // 社员编号 (如 No.00001)
+    let memberCode: String      // 社员识别码（无横线，如 SM201809A00100201）
     let generation: String      // 年级 (如 2018级)
     let clazz: String           // 班级
     let Birthday: Date
@@ -102,6 +103,7 @@ extension RaspberryMember {
         case name = "姓名"
         case alias = "别名"
         case idCode = "社员编号"
+        case memberCode = "社员识别码"
         case generation = "年级"
         case clazz = "班级（分班后）"
         case Birthday = "生日"
@@ -128,6 +130,7 @@ extension RaspberryMember {
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
         alias = try container.decodeIfPresent(String.self, forKey: .alias) ?? ""
         idCode = try container.decodeIfPresent(String.self, forKey: .idCode) ?? ""
+        memberCode = try container.decodeIfPresent(String.self, forKey: .memberCode) ?? ""
         contactQQ = try container.decodeIfPresent(String.self, forKey: .contactQQ) ?? ""
         generation = try container.decodeIfPresent(String.self, forKey: .generation) ?? ""
         clazz = try container.decodeIfPresent(String.self, forKey: .clazz) ?? ""

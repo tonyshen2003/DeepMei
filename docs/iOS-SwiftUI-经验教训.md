@@ -263,3 +263,79 @@ let mapped = await MainActor.run(resultType: RaspberryMember?.self) {
   `UpdateEntry.testFlightInviteURL` 配置，为空时回退 TestFlight 商店页。
 - 发行前跑一遍：登录定位权限、扫码签到全流程、作品网格、深色模式。
 
+---
+
+## 9. Apple Watch（watchOS 10+ / WatchConnectivity）
+
+> 本次补充：手表端三页（表情抽卡 / 社员卡 / 二维码）开发与同步排障。
+
+### 9.1 HIG 要点
+
+- watchOS 10+ 顶层页面切换用 `.tabViewStyle(.verticalPage)`（表冠纵向翻页），
+  不要用横向 `.page`。横向滑动没被禁止，但只适合内容本身横向的场景；
+  官方 Digital Crown 章节明确要求“纵向分页标签”。
+- 字体用系统样式（`.caption2` / `.footnote`），不要 `.system(size: 9)`：
+  9pt 低于 watchOS 最小可读尺寸，且不跟随 Dynamic Type。
+- Always On 隐私：`@Environment(\.isLuminanceReduced)` 在垂腕变暗时为 `true`，
+  用它隐藏姓名 / ID / 二维码等个人信息。
+- 整屏手势要补 `.accessibilityAddTraits(.isButton)` + `.accessibilityAction`，
+  否则 VoiceOver 无法激活。
+
+### 9.2 `UIGraphicsImageRenderer` 默认 3x 渲染：7009 的元凶
+
+`UIGraphicsImageRenderer(size:)` 默认按屏幕 scale（iPhone 3x）输出，
+“160pt”实际生成 480×480 像素，体积膨胀约 9 倍，头像 + 二维码轻松超过
+`sendMessage` 上限（WCErrorCodePayloadTooLarge = 7009）。
+
+```swift
+let format = UIGraphicsImageRendererFormat()
+format.scale = 1
+let renderer = UIGraphicsImageRenderer(size: target, format: format)
+```
+
+修复后头像约 2KB、二维码约 3KB，任何通道都不会超限。
+
+### 9.3 WatchConnectivity 通道选择
+
+| 通道 | 特点 |
+| --- | --- |
+| `updateApplicationContext` | 系统只保留最新一份，手表启动可读；重装手表 App 后清空 |
+| `transferUserInfo` | 排队投递，对方 App 未运行时下次启动补投 |
+| `transferFile` | 图片/大文件专用，无小 payload 限制，排队投递 |
+| `sendMessage` | 实时，要求对方 App 可达；超限报 7009，不可达报 7007 |
+
+经验：
+
+- 图片数据不要只依赖一条通道。体积修好后让 `sendMessage` 直接带完整数据
+  （几 KB），context / userInfo / transferFile 作兜底。
+- 手表端要把最近一次登录态存 UserDefaults（含头像/二维码），
+  重装后第一次仍需手机同步一次。
+- 文字更新或旧 context 可能不带图，合入时必须保留本地已有的
+  `avatarData` / `qrCodeData`；只有 `memberCode` / `idCode` 变化（换社员）才清空。
+- 收到文件可能先于文字信息到达：按 memberCode 暂存，等文字到了再合并。
+
+### 9.4 典型排障
+
+症状：只重启手表 App → 有文字、没头像/二维码；重新进入手机 App → 全有。
+
+原因：手机 App 在后台仍会发消息，但旧实现把实时消息做成“纯文字”，图片只走
+context / userInfo；这两条在特定设备/模拟器环境没送达，于是只剩文字。
+
+解法：把图片放回那条已被证明能通的 `sendMessage` 通道（体积修好后完全可行），
+其他通道保留作兜底，不要再“绕路”。
+
+日志识别：
+
+- `WCErrorCodeNotReachable`（7007）＝对方 App 不可达；
+- `WCErrorCodePayloadTooLarge`（7009）＝payload 超限；
+- `Application context data is nil`＝手表端没有 context，只能靠本地缓存或推送。
+
+### 9.5 小坑
+
+- SwiftUI `View` 是 struct，`Task` 里不能写 `[weak self]`；用 `@State` 持有
+  Task 句柄，循环里靠 `Task.isCancelled` + 状态变量退出。
+- 卡片里的 `AsyncImage` / `UIImage(data:)` 会在父视图每次重绘时重新加载/解码，
+  导致头像闪烁。抽成独立子视图 + `@State` 缓存 + `.task(id:)`，
+  动画只作用在变化的那行文字（`.contentTransition(.opacity)` + `.animation(value:)`）。
+- 长按抽卡：`Task` 循环按递减间隔切换，最快 0.05s 封顶；
+  震动只保留“触发”和“松手出结果”两次，快速滚动阶段不震。
