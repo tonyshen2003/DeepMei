@@ -166,27 +166,16 @@ struct HomeNavigationView: View {
             }
             .navigationTitle("欢迎！")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        selectedTab = .profile
-                    } label: {
-                        Group {
-                            if loginManager.isLoggedIn, !loginManager.loggedInAvatarUrl.isEmpty {
-                                FeishuAsyncImage(
-                                    urlString: loginManager.loggedInAvatarUrl,
-                                    placeholderName: loginManager.loggedInName,
-                                    contentMode: .fill
-                                )
-                            } else {
-                                Image("ClubLogo")
-                                    .resizable()
-                                    .scaledToFill()
-                            }
-                        }
-                        .frame(width: 32, height: 32)
-                        .clipShape(Circle())
+                if #available(iOS 26.0, *) {
+                    ToolbarItem(placement: .topBarLeading) {
+                        profileAvatarButton
                     }
-                    .accessibilityLabel("个人中心")
+                    // 关掉系统自动加的椭圆胶囊玻璃，头像用自定义正圆玻璃
+                    .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .topBarLeading) {
+                        profileAvatarButton
+                    }
                 }
 
                 ToolbarItem(
@@ -216,6 +205,46 @@ struct HomeNavigationView: View {
                     emojiIndex = Int.random(in: 1...49)
                 }
             }
+        }
+    }
+
+    /// 左上角头像按钮：32pt 视觉尺寸 + 44pt 点击区域
+    private var profileAvatarButton: some View {
+        Button {
+            selectedTab = .profile
+        } label: {
+            Group {
+                if loginManager.isLoggedIn, !loginManager.loggedInAvatarUrl.isEmpty {
+                    FeishuAsyncImage(
+                        urlString: loginManager.loggedInAvatarUrl,
+                        placeholderName: loginManager.loggedInName,
+                        contentMode: .fill
+                    )
+                } else {
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .scaledToFill()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 32, height: 32)
+            .clipShape(Circle())
+            .modifier(AvatarCircularGlass())
+        }
+        .frame(minWidth: 44, minHeight: 44)
+        .accessibilityLabel("个人中心")
+    }
+}
+
+/// iOS 26 液态玻璃：圆形头像用正圆玻璃容器，替代系统默认的椭圆胶囊。
+private struct AvatarCircularGlass: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .padding(4)
+                .glassEffect(.regular.interactive(), in: .circle)
+        } else {
+            content
         }
     }
 }

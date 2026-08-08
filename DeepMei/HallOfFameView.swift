@@ -291,7 +291,16 @@ struct MemberDetailSheet: View {
                             }
                         }
                         .clipped()
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        // 沉浸式封面：顶部贴住 sheet 上缘（状态栏/透明导航栏区域），只保留底部圆角
+                        .clipShape(
+                            UnevenRoundedRectangle(
+                                topLeadingRadius: 0,
+                                bottomLeadingRadius: 18,
+                                bottomTrailingRadius: 18,
+                                topTrailingRadius: 0,
+                                style: .continuous
+                            )
+                        )
                         .accessibilityHidden(true)
                     
                     // 详情文本及图表
@@ -370,9 +379,10 @@ struct MemberDetailSheet: View {
                     }
                     .padding(.horizontal)
                 }
-                .padding(.top, 16) // 稍微拉开一点顶部边距
                 .padding(.bottom, 30)
             }
+            // 沉浸式模态：内容延伸到透明导航栏/状态栏区域，关闭按钮悬浮在封面图上
+            .ignoresSafeArea(edges: .top)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     closeButton

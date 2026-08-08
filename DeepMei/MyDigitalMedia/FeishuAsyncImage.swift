@@ -12,7 +12,8 @@ struct FeishuAsyncImage: View {
     let placeholderName: String // 用于显示首字母占位符
     var contentMode: ContentMode = .fill
     var placeholderText: String? = nil
-    var placeholderColors: [Color] = [Color.blue.opacity(0.6), Color.purple.opacity(0.6)]
+    // 用不透明系统色保证白字对比度（浅色模式下也满足可读性要求）
+    var placeholderColors: [Color] = [Color.indigo, Color.purple]
 
     @State private var image: UIImage? = nil
     @State private var isLoading = false
@@ -32,9 +33,9 @@ struct FeishuAsyncImage: View {
             } else if isLoading {
                 // 加载中显示进度条
                 ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .tint(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.gray.opacity(0.3))
+                    .background(Color(.secondarySystemFill))
             } else {
                 // 加载失败或无链接时，显示你之前设计的首字母占位符
                 placeholderAvatar
@@ -75,15 +76,20 @@ struct FeishuAsyncImage: View {
     
     // 你的首字母占位图设计（复用你之前的逻辑）
     private var placeholderAvatar: some View {
-        ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: placeholderColors),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Text(placeholderText ?? String(placeholderName.prefix(1)))
-                .font(.system(size: 30, weight: .bold))
-                .foregroundColor(.white)
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            ZStack {
+                LinearGradient(
+                    gradient: Gradient(colors: placeholderColors),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                Text(placeholderText ?? String(placeholderName.prefix(1)))
+                    .font(.system(size: side * 0.45, weight: .bold))
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .foregroundColor(.white)
+            }
         }
     }
 }

@@ -80,9 +80,10 @@ struct ProfileView: View {
                         contentMode: .fill
                     )
                 } else {
-                    Image("ClubLogo")
+                    Image(systemName: "person.crop.circle.fill")
                         .resizable()
                         .scaledToFill()
+                        .foregroundStyle(.secondary)
                 }
             }
             .frame(width: 56, height: 56)
