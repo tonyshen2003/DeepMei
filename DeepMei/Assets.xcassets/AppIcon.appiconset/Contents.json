@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "shumeilogo.png",
+      "filename" : "shumeilogo-noalpha 1.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +13,7 @@
           "value" : "dark"
         }
       ],
-      "filename" : "树莓酱表情包202602封面.png",
+      "filename" : "shumeilogo-noalpha.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -25,6 +25,7 @@
           "value" : "tinted"
         }
       ],
+      "filename" : "shumeilogo-noalpha 2.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
