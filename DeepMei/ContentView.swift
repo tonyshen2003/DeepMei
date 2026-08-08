@@ -40,15 +40,6 @@ struct ContentView: View {
                     )
                 }
                 .tag(MainTab.library)
-            // MARK: - 活动
-           // ActivityView()
-              //  .tabItem {
-             //       Label(
-             //           "活动",
-            //            systemImage: "calendar"
-           //         )
-           //     }
-           //     .tag(MainTab.activities)
             // MARK: - 工作台
             WorkbenchView()
                 .tabItem {

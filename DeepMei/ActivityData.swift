@@ -92,29 +92,110 @@ let defaultActivities: [ActivityItem] = [
     ActivityItem(
         id: "signup",
         title: "活动签到",
-        subtitle: "贴 NFC 卡或扫码即可签到，活动现场使用",
+        subtitle: "贴NFC卡或扫码即可签到",
         group: .activity,
         common: true,
         iconKey: "event",
         target: .webView(url: "https://cqbxhfrnwy.coze.site", title: "活动签到")
     ),
+    ActivityItem(
+        id: "zhaoxin",
+        title: "树莓招新",
+        subtitle: "加入树莓谢谢喵",
+        group: .activity,
+        common: true,
+        iconKey: "home",
+        target: .webView(url: "https://szzxshumei.feishu.cn/share/base/form/shrcnw0A0uJ63KnhABpKyBJfLJV", title: "树莓招新")
+    ),
     // —— 活动分组 ——
     ActivityItem(
-        id: "portal",
-        title: "活动主页",
-        subtitle: "社团活动总入口，报名与动态查看",
+        id: "questionnaire",
+        title: "树莓酱问卷",
+        subtitle: "分享你对文创的想法",
         group: .activity,
-        iconKey: "home",
-        target: .webView(url: "https://47.98.140.63:30000/", title: "活动主页")
+        iconKey: "event",
+        target: .webView(url: "https://szzxshumei.feishu.cn/share/base/form/shrcnh1MRrXQ19SJx7KmzRmI5Rd", title: "树莓酱问卷")
+    ),
+    ActivityItem(
+        id: "coming_of_age",
+        title: "高三成人礼",
+        subtitle: "照片合集",
+        group: .activity,
+        iconKey: "event",
+        target: .webView(url: "https://szzxshumei.com/post/2026/2026-coming-of-age-ceremony/", title: "高三成人礼")
+    ),
+    ActivityItem(
+        id: "sports_2019",
+        title: "2019运动会",
+        subtitle: "照片直播",
+        group: .activity,
+        iconKey: "play",
+        target: .webView(url: "https://m.inmuu.com/v1/photolive/news/143862", title: "2019运动会")
+    ),
+    ActivityItem(
+        id: "cloud_genshin",
+        title: "云原神",
+        subtitle: "",
+        group: .activity,
+        iconKey: "apps",
+        target: .webView(url: "https://ys.mihoyo.com/cloud/#/", title: "云原神", hideTopBar: true, fullscreenLandscape: true)
+    ),
+    ActivityItem(
+        id: "cloud_starrail",
+        title: "云·星穹铁道",
+        subtitle: "",
+        group: .activity,
+        iconKey: "apps",
+        target: .webView(url: "https://sr.mihoyo.com/cloud/#/", title: "云·星穹铁道", hideTopBar: true, fullscreenLandscape: true)
+    ),
+    ActivityItem(
+        id: "arknights",
+        title: "明日方舟",
+        subtitle: "",
+        group: .activity,
+        iconKey: "apps",
+        target: .webView(url: "https://cg.163.com/static/game/mrfz?sourcepage=cg&show=mrfz&back=https%3A%2F%2Fcg.163.com%2Findex.html%23%2Fsearch%3Fkey%3D%25E6%2598%258E%25E6%2597%25A5%25E6%2596%25B9%25E8%2588%259F", title: "明日方舟", hideTopBar: true, fullscreenLandscape: true)
+    ),
+    ActivityItem(
+        id: "cloud_zzz",
+        title: "云绝区零",
+        subtitle: "",
+        group: .activity,
+        iconKey: "apps",
+        target: .webView(url: "https://zzz.mihoyo.com/cloud/#/", title: "云绝区零", hideTopBar: true, fullscreenLandscape: true)
+    ),
+    ActivityItem(
+        id: "tedx_2020",
+        title: "Tedxsuzhou2020",
+        subtitle: "",
+        group: .activity,
+        iconKey: "cloud",
+        target: .webView(url: "https://muuau2np7o.zhaopianzhibo.com/v1/photolive/news/697599", title: "Tedxsuzhou2020")
+    ),
+    ActivityItem(
+        id: "school_115",
+        title: "115校庆",
+        subtitle: "",
+        group: .activity,
+        iconKey: "cloud",
+        target: .webView(url: "https://muuky2nnda.zhaopianzhibo.com/v1/photolive/news/229601", title: "115校庆")
+    ),
+    ActivityItem(
+        id: "olympic_2021",
+        title: "2021奥体运动会",
+        subtitle: "",
+        group: .activity,
+        iconKey: "cloud",
+        target: .webView(url: "https://m.inmuu.com/v1/photolive/news/1322531", title: "2021奥体运动会")
     ),
     // —— 资源分组 ——
     ActivityItem(
         id: "webdrive",
         title: "树莓网盘",
-        subtitle: "存储",
+        subtitle: "存储（好像坏了）",
         group: .resource,
         iconKey: "cloud",
-        target: .webView(url: "https://webdrive.szzxshumei.com/", title: "网盘")
+        target: .webView(url: "https://webdrive.szzxshumei.com/", title: "树莓网盘")
     ),
     ActivityItem(
         id: "tech_lib",
@@ -124,13 +205,61 @@ let defaultActivities: [ActivityItem] = [
         iconKey: "book",
         target: .webView(url: "https://docs.szzxshumei.com/", title: "树莓技术库")
     ),
+    ActivityItem(
+        id: "aiccrop",
+        title: "aiccrop",
+        subtitle: "",
+        group: .resource,
+        iconKey: "cloud",
+        target: .webView(url: "https://auth.aiccrop.com/", title: "aiccrop")
+    ),
+    ActivityItem(
+        id: "szzx1000",
+        title: "苏州中学官网",
+        subtitle: "",
+        group: .resource,
+        iconKey: "cloud",
+        target: .webView(url: "https://www.szzx1000.cn/", title: "苏州中学官网")
+    ),
     // —— 媒体分组 ——
     ActivityItem(
-        id: "BILI",
+        id: "website",
+        title: "社团官网",
+        subtitle: "szzxshumei.com",
+        group: .media,
+        iconKey: "home",
+        target: .webView(url: "https://szzxshumei.com", title: "社团官网")
+    ),
+    ActivityItem(
+        id: "bili",
         title: "树莓B站",
         subtitle: "欢迎关注收看更多视频",
         group: .media,
         iconKey: "play",
         target: .webView(url: "https://space.bilibili.com/275501702", title: "视频")
+    ),
+    ActivityItem(
+        id: "raspjam",
+        title: "树莓酱官网",
+        subtitle: "关注树莓酱",
+        group: .media,
+        iconKey: "cloud",
+        target: .webView(url: "https://raspjam.com/", title: "树莓酱官网")
+    ),
+    ActivityItem(
+        id: "xhs",
+        title: "树莓酱酱酱",
+        subtitle: "小红书",
+        group: .media,
+        iconKey: "cloud",
+        target: .webView(url: "https://xhslink.cn/m/5jNVMA3I7AG", title: "树莓酱酱酱")
+    ),
+    ActivityItem(
+        id: "douyin",
+        title: "苏中学生传媒",
+        subtitle: "抖音",
+        group: .media,
+        iconKey: "apps",
+        target: .webView(url: "https://v.douyin.com/K4-bCE1NmTA/", title: "苏中学生传媒")
     )
 ]
