@@ -117,7 +117,7 @@ enum LarkValue: Sendable {
         else { self = .null }
     }
 
-    var flattenedText: String {
+    nonisolated var flattenedText: String {
         switch self {
         case .string(let s): return s
         case .int(let i): return String(i)
@@ -226,10 +226,11 @@ actor MemberService {
     private var cachedToken: String?
     private var tokenExpiry: Date?
 
-    /// 全能查询（支持：姓名 / 社员编号 / 社员识别码 / 认读码 / 社员序号）
-    func searchMember(byNameOrCodeOrAlias query: String) async throws -> RaspberryMember? {
+    /// 全能查询（支持：姓名 / 社员编号 / 社员识别码 / 认读码 / 社员序号），
+    /// 返回全部精确匹配（重名时由界面给出候选列表，与 Android searchMembers 对齐）。
+    func searchMembers(byNameOrCodeOrAlias query: String) async throws -> [RaspberryMember] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
+        guard !trimmed.isEmpty else { return [] }
         
         let token = try await getTenantAccessToken()
         
@@ -252,7 +253,7 @@ actor MemberService {
         
         components.queryItems = [
             URLQueryItem(name: "filter", value: filterFormula),
-            URLQueryItem(name: "page_size", value: "1")
+            URLQueryItem(name: "page_size", value: "100")
         ]
         
         guard let requestURL = components.url else {
@@ -273,11 +274,18 @@ actor MemberService {
             throw MemberServiceError.apiError(code: decoded.code, message: decoded.msg)
         }
         
-        if let firstItem = decoded.data?.items?.first {
-            return await Self.mapRecord(fields: firstItem.fields)
+        var members: [RaspberryMember] = []
+        for item in decoded.data?.items ?? [] {
+            if let member = await Self.mapRecord(fields: item.fields) {
+                members.append(member)
+            }
         }
-        
-        return nil
+        return members
+    }
+
+    /// 单条查询（登录页等只需要第一条结果时使用）。
+    func searchMember(byNameOrCodeOrAlias query: String) async throws -> RaspberryMember? {
+        try await searchMembers(byNameOrCodeOrAlias: query).first
     }
 
     // MARK: Token 鉴权
@@ -429,7 +437,8 @@ actor MemberService {
                 description: text("详细介绍"),
                 photoURLs: fields["个人照片"]?.imageURLs ?? [],
                 avatarURLs: fields["头像"]?.imageURLs ?? [],
-                works: fields["代表作品"]?.workItems ?? []
+                works: fields["代表作品"]?.workItems ?? [],
+                loginPassword: text("登录密码")
             )
         }
 }
@@ -516,25 +525,105 @@ actor MemberSnapshotCache {
         return Date().timeIntervalSince(stored.savedAt) <= ttl
     }
 
-    /// 按姓名/别名/编号/识别码/认读码/序号在快照中查找社员。
-    func findMember(query: String) async -> RaspberryMember? {
-        guard let stored = await load() else { return nil }
+    /// 按姓名/别名/编号/识别码/认读码/序号在快照中精确查找社员，
+    /// 返回全部匹配（完整值一致才命中，与在线查询语义一致）。
+    func findMembers(query: String) async -> [RaspberryMember] {
+        guard let stored = await load() else { return [] }
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { return nil }
+        guard !q.isEmpty else { return [] }
 
         let keys = [
             "姓名", "别名", "社员编号", "社员识别码",
             "社员身份编码（认读码）", "社员序号"
         ]
-        guard let item = stored.snapshot.items.first(where: { item in
+        let matchedItems = stored.snapshot.items.filter { item in
             keys.contains { key in
-                item.fields[key]?.flattenedText.localizedCaseInsensitiveContains(q) ?? false
+                item.fields[key]?.flattenedText == q
+            }
+        }
+
+        var members: [RaspberryMember] = []
+        for item in matchedItems {
+            let mapped = await MainActor.run(resultType: RaspberryMember?.self) {
+                MemberService.mapRecord(fields: item.fields)
+            }
+            if let member = mapped {
+                members.append(member)
+            }
+        }
+        return members
+    }
+
+    /// 单条精确查找（取第一条）。
+    func findMember(query: String) async -> RaspberryMember? {
+        await findMembers(query: query).first
+    }
+
+    /// 签到页专用：按卡号/识别码/社员编号精确匹配快照，未命中返回 nil。
+    func findCheckInMember(code: String) async -> CheckInMember? {
+        guard let stored = await load() else { return nil }
+        let normalized = code.trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+            .replacingOccurrences(of: ":", with: "")
+        guard !normalized.isEmpty else { return nil }
+
+        let keys = ["社员识别码", "社员身份编码（认读码）", "社员编号"]
+        guard let item = stored.snapshot.items.first(where: { item in
+            let cardText = item.fields["社员卡号"]?.flattenedText ?? ""
+            let cardMatches = cardText
+                .split(separator: ";")
+                .contains { $0.trimmingCharacters(in: .whitespaces).uppercased() == normalized }
+            if cardMatches { return true }
+            return keys.contains { key in
+                (item.fields[key]?.flattenedText ?? "").uppercased() == normalized
             }
         }) else { return nil }
 
-        return await MainActor.run {
-            MemberService.mapRecord(fields: item.fields)
+        let fields = item.fields
+        return CheckInMember(
+            name: snapshotText(fields, "姓名"),
+            alias: snapshotText(fields, "别名"),
+            idCode: snapshotText(fields, "社员编号"),
+            generation: snapshotText(fields, "年级"),
+            className: snapshotText(fields, "班级（分班后）"),
+            department: snapshotText(fields, "社团部门"),
+            cardId: snapshotText(fields, "社员卡号"),
+            readableCode: snapshotText(fields, "社员身份编码（认读码）"),
+            memberSeq: snapshotText(fields, "社员序号"),
+            position: snapshotMultiText(fields, "社团职务", separator: " / "),
+            joinYear: snapshotJoinYear(fields, "入社日期")
+        )
+    }
+
+    /// 快照字段转纯文本（多选数组用空格连接，与 Android text() 对齐）。
+    private func snapshotText(_ fields: [String: LarkValue], _ key: String) -> String {
+        (fields[key]?.flattenedText ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 多选字段（纯字符串数组或富文本数组）用指定分隔符连接。
+    private func snapshotMultiText(_ fields: [String: LarkValue], _ key: String, separator: String) -> String {
+        guard let value = fields[key] else { return "" }
+        if case .array(let array) = value {
+            return array.map { $0.flattenedText }
+                .filter { !$0.isEmpty }
+                .joined(separator: separator)
         }
+        return snapshotText(fields, key)
+    }
+
+    /// 入社日期（毫秒时间戳 / 日期字符串）→ 只取年份。
+    private func snapshotJoinYear(_ fields: [String: LarkValue], _ key: String) -> String {
+        let raw = snapshotText(fields, key)
+        guard !raw.isEmpty, let timestamp = Double(raw) else {
+            let prefix = String(raw.prefix(4))
+            return prefix.count == 4 && prefix.allSatisfy(\.isNumber) ? prefix : ""
+        }
+        let millis = timestamp > 10_000_000_000 ? timestamp : timestamp * 1000
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy"
+        formatter.locale = Locale(identifier: "zh_CN")
+        return formatter.string(from: Date(timeIntervalSince1970: millis / 1000))
     }
 }
 

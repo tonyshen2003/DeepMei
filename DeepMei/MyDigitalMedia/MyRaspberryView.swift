@@ -66,6 +66,7 @@ struct RaspberryMember: Identifiable, Equatable, Decodable {
     let photoURLs: [String]     // 个人照片 URL 列表
     let avatarURLs: [String]    // 头像 URL 列表（飞书「头像」字段，Android 同款）
     let works: [WorkItem]       // 代表作品列表（图片或视频）
+    let loginPassword: String   // 登录密码（仅登录页比对使用）
 
     /// 头像：优先「头像」字段第一张，缺失时回退到个人照片第一张（与 Android 对齐）。
     var avatarURL: String? {
@@ -117,6 +118,7 @@ extension RaspberryMember {
         case avatarList = "个人照片"
         case avatar = "头像"
         case ArtpicList = "代表作品"
+        case loginPassword = "登录密码"
     }
 
     init(from decoder: Decoder) throws {
@@ -200,6 +202,7 @@ extension RaspberryMember {
         } else {
             works = []
         }
+        loginPassword = try container.decodeIfPresent(String.self, forKey: .loginPassword) ?? ""
     }
 }
 
@@ -213,7 +216,10 @@ private struct DynamicCodingProperty: Codable {
 }
 // MARK: - 2. 主页面视图
 struct MyRaspberryView: View {
-    @State private var member: RaspberryMember?
+    @ObservedObject private var loginManager = LoginManager.shared
+
+    @State private var members: [RaspberryMember] = []
+    @State private var selectedIndex: Int = -1
 
     // 查询状态管理
     @State private var searchText: String = ""
@@ -224,17 +230,32 @@ struct MyRaspberryView: View {
     @State private var refreshMessage: String?
     @FocusState private var isFocused: Bool
 
+    private var selectedMember: RaspberryMember? {
+        guard selectedIndex >= 0, selectedIndex < members.count else { return nil }
+        return members[selectedIndex]
+    }
+
     var body: some View {
+        if loginManager.isLoggedIn {
+            myRaspberryContent
+        } else {
+            NavigationStack {
+                LoginPromptView()
+            }
+        }
+    }
+
+    private var myRaspberryContent: some View {
             NavigationStack {
                 Group {
                     if isSearching {
                         ProgressView("正在查询社员档案...")
                             .controlSize(.large)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if let member {
+                    } else if let selectedMember {
                         ScrollView {
                             VStack(spacing: 20) {
-                                MemberProfileCard(member: member)
+                                MemberProfileCard(member: selectedMember)
                                 
                                 // 底部品牌标识
                                 Image("DigitalMedia-Line")
@@ -248,6 +269,14 @@ struct MyRaspberryView: View {
                             .padding(.vertical, 16)
                         }
                         .background(Color(uiColor: .systemGroupedBackground))
+                        .transition(.opacity)
+                    } else if !members.isEmpty {
+                        // 重名候选列表：多结果时停留在此，点选后进入详情
+                        MemberCandidateList(members: members) { index in
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                selectedIndex = index
+                            }
+                        }
                         .transition(.opacity)
                     } else if notFound {
                         // 符合 iOS 规范的整页空状态提示
@@ -294,6 +323,29 @@ struct MyRaspberryView: View {
                     performSearch()
                 }
                 .toolbar {
+                    // 详情页返回候选列表（重名时）
+                    if selectedMember != nil, members.count > 1 {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    selectedIndex = -1
+                                }
+                            } label: {
+                                Label("候选列表", systemImage: "chevron.left")
+                            }
+                        }
+                    }
+
+                    // 退出登录（与 Android 工具栏一致）
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            LoginManager.shared.logout()
+                        } label: {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                        }
+                        .accessibilityLabel("退出登录")
+                    }
+
                     // 手动刷新社员资料快照
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
@@ -308,7 +360,7 @@ struct MyRaspberryView: View {
                         .disabled(isRefreshingSnapshot)
                     }
 
-                    if member != nil {
+                    if selectedMember != nil {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button {
                                 resetSearch()
@@ -336,7 +388,8 @@ struct MyRaspberryView: View {
     // MARK: 交互逻辑
     private func resetSearch() {
         withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
-            member = nil
+            members = []
+            selectedIndex = -1
             searchText = ""
             notFound = false
         }
@@ -351,23 +404,32 @@ struct MyRaspberryView: View {
         let query = searchText
         Task {
             do {
-                // 快照缓存优先（秒开、离线可用）；未命中或没有快照时回退到飞书实时查询
-                let result: RaspberryMember?
-                if let cached = await MemberSnapshotCache.shared.findMember(query: query) {
-                    result = cached
+                // 快照缓存优先（秒开、离线可用）；都返回全部精确匹配，重名时由界面给出候选列表
+                let cached = await MemberSnapshotCache.shared.findMembers(query: query)
+                let results: [RaspberryMember]
+                if !cached.isEmpty {
+                    results = cached
                     // 快照过期：先用旧数据展示，后台静默刷新
                     if !(await MemberSnapshotCache.shared.isFresh()) {
                         Task { _ = await MemberSnapshotCache.shared.refresh() }
                     }
                 } else {
-                    result = try await MemberService.shared.searchMember(byNameOrCodeOrAlias: query)
+                    results = try await MemberService.shared.searchMembers(byNameOrCodeOrAlias: query)
+                    // 本地快照未命中（如刚登记的新社员）：在线查到后立即后台刷新快照，下次即可秒开
+                    if !results.isEmpty {
+                        Task { _ = await MemberSnapshotCache.shared.refresh() }
+                    }
                 }
                 await MainActor.run {
                     isSearching = false
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                        if let m = result {
-                            member = m
+                        if !results.isEmpty {
+                            members = results
+                            // 只有一条结果时直接进详情；多条时先停在候选列表
+                            selectedIndex = results.count == 1 ? 0 : -1
                         } else {
+                            members = []
+                            selectedIndex = -1
                             notFound = true
                         }
                     }
@@ -400,6 +462,96 @@ struct MyRaspberryView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - 2.5 重名候选列表
+
+private struct MemberCandidateList: View {
+    let members: [RaspberryMember]
+    let onSelect: (Int) -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                HStack {
+                    Text("找到 \(members.count) 位社员，请选择")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 4)
+
+                ForEach(Array(members.enumerated()), id: \.element.id) { index, member in
+                    Button {
+                        onSelect(index)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Group {
+                                if let avatarURL = member.avatarURL, URL(string: avatarURL) != nil {
+                                    FeishuAsyncImage(
+                                        urlString: avatarURL,
+                                        placeholderName: member.name,
+                                        contentMode: .fill
+                                    )
+                                } else {
+                                    ZStack {
+                                        Circle()
+                                            .fill(Color.accentColor.gradient)
+                                        Text(String(member.name.prefix(1)))
+                                            .font(.system(size: 18, weight: .bold))
+                                            .foregroundStyle(.white)
+                                    }
+                                }
+                            }
+                            .frame(width: 48, height: 48)
+                            .clipShape(Circle())
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Text(member.name)
+                                        .font(.headline)
+                                    if !member.alias.isEmpty {
+                                        Text("(\(member.alias))")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Text([member.generation, member.clazz, member.department]
+                                    .filter { !$0.isEmpty }
+                                    .joined(separator: " · "))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer(minLength: 8)
+
+                            Text(member.idCode)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color.accentColor.opacity(0.12), in: Capsule())
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(12)
+                        .background(
+                            Color(uiColor: .secondarySystemGroupedBackground),
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: 560)
+            .frame(maxWidth: .infinity)
+        }
+        .background(Color(uiColor: .systemGroupedBackground))
     }
 }
 
@@ -834,18 +986,45 @@ struct WorkGridSection: View {
     @State private var viewerPresented = false
     @State private var selectedIndex = 0
 
-    // 1 张图时全宽单列，2 张及以上用 2 列网格
-    private var columns: [GridItem] {
-        supportedWorks.count <= 1
-            ? [GridItem(.flexible(), spacing: 12)]
-            : [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-    }
-
     private var supportedWorks: [WorkItem] {
         works.filter { $0.type != .unsupported && !$0.url.isEmpty }
     }
     private var unsupportedCount: Int {
         works.count - supportedWorks.count
+    }
+
+    /// 与 Android ArtWorksGridSection 一致：两两一行，避免 Lazy 网格在滚动容器里的布局歧义。
+    private var rows: [[WorkItem]] {
+        stride(from: 0, to: supportedWorks.count, by: 2).map { start in
+            Array(supportedWorks[start..<min(start + 2, supportedWorks.count)])
+        }
+    }
+
+    /// 两列布局下作品卡的最大宽度（超过后不再拉宽）。
+    private let maxCardWidth: CGFloat = 240
+    private let gridSpacing: CGFloat = 20
+
+    /// 作品卡宽度：两列各占可用宽度的一半，但不超过最大宽度。
+    /// 布局常量：页面左右边距 16×2 + 本节内边距 16×2 + 列间距 [gridSpacing]。
+    private var workCardWidth: CGFloat {
+        let screenWidth = UIScreen.main.bounds.width
+        let availableInner = screenWidth - 64
+        let columnWidth = (availableInner - gridSpacing) / 2
+        return min(columnWidth, maxCardWidth)
+    }
+
+    /// 4:3 照片比例。
+    private var workCardHeight: CGFloat {
+        workCardWidth * 3 / 4
+    }
+
+    /// 单张作品：与网格卡一致的最大宽度 + 4:3，保证任何场景宽度都被限制。
+    private var singleWorkWidth: CGFloat {
+        min(UIScreen.main.bounds.width - 64, maxCardWidth)
+    }
+
+    private var singleWorkHeight: CGFloat {
+        singleWorkWidth * 3 / 4
     }
 
     var body: some View {
@@ -865,14 +1044,37 @@ struct WorkGridSection: View {
             }
             .padding(.top, 8)
 
-            // 作品网格
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(Array(supportedWorks.enumerated()), id: \.element.id) { index, work in
-                    ImageWorkCard(work: work) {
-                        selectedIndex = index
-                        viewerPresented = true
+            // 作品网格：单张全宽；多张两两一行
+            if supportedWorks.count == 1 {
+                ImageWorkCard(
+                    work: supportedWorks[0],
+                    width: singleWorkWidth,
+                    height: singleWorkHeight
+                ) {
+                    selectedIndex = 0
+                    viewerPresented = true
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+            } else {
+                // 作品卡最大宽度 + 4:3 比例：避免宽屏下卡片被拉得过宽
+                VStack(spacing: gridSpacing) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                        HStack(spacing: gridSpacing) {
+                            ForEach(Array(row.enumerated()), id: \.element.id) { colIndex, work in
+                                ImageWorkCard(
+                                    work: work,
+                                    width: workCardWidth,
+                                    height: workCardHeight
+                                ) {
+                                    selectedIndex = rowIndex * 2 + colIndex
+                                    viewerPresented = true
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
+                .padding(.vertical, 8)
             }
 
             // 不支持格式提示
@@ -897,13 +1099,19 @@ struct WorkGridSection: View {
 
 struct ImageWorkCard: View {
     let work: WorkItem
+    let width: CGFloat
+    let height: CGFloat
     let onTap: () -> Void
 
     var body: some View {
         FeishuAsyncImage(urlString: work.url, placeholderName: "作品", contentMode: .fill)
-            .frame(maxWidth: .infinity)
-            .frame(height: 150)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .frame(width: width, height: height)
+            .background(Color(uiColor: .secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(Color(uiColor: .separator), lineWidth: 1)
+            )
             .contentShape(Rectangle())
             .onTapGesture {
                 onTap()

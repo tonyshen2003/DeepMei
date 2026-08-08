@@ -5,6 +5,14 @@
 
 import SwiftUI
 
+/// 更新入口配置。
+private enum UpdateEntry {
+    /// TestFlight 公开邀请链接；发布后替换为真实链接（例如 https://testflight.apple.com/join/XXXXXX）。
+    /// 为空时回退到 TestFlight 在 App Store 的页面。
+    static let testFlightInviteURL: String? = nil
+    static let fallbackURL = URL(string: "itms-apps://apps.apple.com/app/id899247664")!
+}
+
 struct AboutView: View {
     private var versionString: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "未知"
@@ -46,6 +54,25 @@ struct AboutView: View {
                 Text("社团简介")
             }
 
+            // MARK: - 更新入口
+            Section {
+                Button {
+                    openUpdateEntry()
+                } label: {
+                    Label {
+                        Text("检查更新")
+                            .foregroundStyle(.primary)
+                    } icon: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundStyle(.green)
+                    }
+                }
+            } header: {
+                Text("更新")
+            } footer: {
+                Text("新版本通过 TestFlight 分发")
+            }
+
             // MARK: - 功能入口
             Section {
                 NavigationLink {
@@ -71,7 +98,7 @@ struct AboutView: View {
                 }
 
                 NavigationLink {
-                    MarkdownArticleView(fileName: "open-source-licenses", title: "开源许可")
+                    OpenSourceLicensesView()
                 } label: {
                     Label {
                         Text("开源许可")
@@ -110,6 +137,16 @@ struct AboutView: View {
         }
         .navigationTitle("关于")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func openUpdateEntry() {
+        let url: URL
+        if let invite = UpdateEntry.testFlightInviteURL, let inviteURL = URL(string: invite) {
+            url = inviteURL
+        } else {
+            url = UpdateEntry.fallbackURL
+        }
+        UIApplication.shared.open(url)
     }
 }
 

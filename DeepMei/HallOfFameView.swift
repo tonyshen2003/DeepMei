@@ -21,7 +21,7 @@ struct HallOfFameMember: Identifiable, Hashable {
     let photo: String
     
     // 届别主题色 (符合 iOS HIG 语义调色)
-    var termColor: Color {
+    static func color(for term: Int) -> Color {
         switch term {
         case 1: return Color(red: 0.58, green: 0.17, blue: 0.22)
         case 2: return Color(red: 0.67, green: 0.37, blue: 0.19)
@@ -34,6 +34,10 @@ struct HallOfFameMember: Identifiable, Hashable {
         default: return .accentColor
         }
     }
+
+    var termColor: Color {
+        Self.color(for: term)
+    }
 }
 
 // MARK: - 名人堂主视图
@@ -41,16 +45,19 @@ struct HallOfFameView: View {
     @State private var selectedTerm: Int = 0 // 0 表示全部
     @State private var selectedMember: HallOfFameMember? = nil
     @State private var searchText: String = ""
+    @Environment(\.dismissSearch) private var dismissSearch
     
     let terms = [0, 1, 2, 3, 4, 5, 6, 7, 8]
     
     var filteredMembers: [HallOfFameMember] {
-        allMembers.filter { member in
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return allMembers.filter { member in
             let matchesTerm = (selectedTerm == 0 || member.term == selectedTerm)
-            let matchesSearch = searchText.isEmpty ||
-                                member.name.contains(searchText) ||
-                                member.role.contains(searchText) ||
-                                member.tags.contains(where: { $0.contains(searchText) })
+            guard !query.isEmpty else { return matchesTerm }
+            let matchesSearch =
+                member.name.localizedCaseInsensitiveContains(query) ||
+                member.role.localizedCaseInsensitiveContains(query) ||
+                member.tags.contains(where: { $0.localizedCaseInsensitiveContains(query) })
             return matchesTerm && matchesSearch
         }
     }
@@ -63,35 +70,26 @@ struct HallOfFameView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // 1. 扁平滑动筛选胶囊 (HIG 推荐横向滚动)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(terms, id: \.self) { term in
-                            FilterChip(
-                                title: term == 0 ? "全部成员" : "第\(chineseTerm(term))届",
-                                isSelected: selectedTerm == term
-                            ) {
-                                withAnimation(.snappy) {
-                                    selectedTerm = term
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-                
-                // 2. 成员卡片网格
+                // 成员卡片网格
                 if filteredMembers.isEmpty {
-                    ContentUnavailableView(
-                        "无匹配成员",
-                        systemImage: "person.slash",
-                        description: Text("尝试切换届别或搜索关键词")
-                    )
+                    ContentUnavailableView {
+                        Label("无匹配成员", systemImage: "person.slash")
+                    } description: {
+                        Text("尝试切换届别或搜索关键词")
+                    } actions: {
+                        Button("显示全部") {
+                            searchText = ""
+                            selectedTerm = 0
+                            dismissSearch()
+                        }
+                        .buttonStyle(.bordered)
+                    }
                     .padding(.top, 40)
                 } else {
                     LazyVGrid(columns: columns, spacing: 20) {
                         ForEach(filteredMembers) { member in
                             Button {
+                                dismissSearch()
                                 selectedMember = member
                             } label: {
                                 MemberCard(member: member)
@@ -99,23 +97,81 @@ struct HallOfFameView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 16)
                 }
             }
-            .padding(.vertical)
+            .padding(.bottom)
+            .padding(.top, 8)
         }
+        .scrollDismissesKeyboard(.immediately)
         .navigationTitle("历届名人堂")
         .navigationBarTitleDisplayMode(.large)
-        .searchable(text: $searchText, prompt: "搜索姓名、职位或标签")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                filterMenu
+            }
+        }
+        // 二级功能页：进入名人堂时隐藏底部 TabBar，聚焦列表内容
+        .toolbar(.hidden, for: .tabBar)
+        // 系统原生搜索框，常驻显示；大标题由下方修饰器保留
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "搜索姓名、职位或标签"
+        )
+        .modifier(KeepLargeTitleWhileSearching())
         .sheet(item: $selectedMember) { member in
             MemberDetailSheet(member: member).presentationDragIndicator(.visible)
         }
     }
-    
-    private func chineseTerm(_ term: Int) -> String {
-        let names = ["一","二","三","四","五","六","七","八"]
-        return term > 0 && term <= names.count ? names[term - 1] : "\(term)"
+
+    // 届别筛选菜单：保留每届主题色，同时避免顶部出现第三条工具行
+    private var filterMenu: some View {
+        Menu {
+            ForEach(terms, id: \.self) { term in
+                let color = HallOfFameMember.color(for: term)
+                Button {
+                    dismissSearch()
+                    withAnimation(.snappy) {
+                        selectedTerm = term
+                    }
+                } label: {
+                    Label {
+                        Text(term == 0 ? "全部成员" : "第\(chineseTerm(term))届")
+                    } icon: {
+                        Image(
+                            systemName: selectedTerm == term
+                                ? "checkmark.circle.fill"
+                                : "circle"
+                        )
+                        .foregroundStyle(color)
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+        }
+        .accessibilityLabel("筛选届别")
+        .accessibilityHint("选择要查看的届别")
     }
+    
+}
+
+// iOS 17.1+：搜索常驻时仍保留导航栏大标题（17.0 无此 API，保持系统默认）
+private struct KeepLargeTitleWhileSearching: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 17.1, *) {
+            content.searchPresentationToolbarBehavior(.avoidHidingContent)
+        } else {
+            content
+        }
+    }
+}
+
+fileprivate func chineseTerm(_ term: Int) -> String {
+    let names = ["一","二","三","四","五","六","七","八"]
+    return term > 0 && term <= names.count ? names[term - 1] : "\(term)"
 }
 
 // MARK: - 成员卡片组件 (HIG 风格)
@@ -123,93 +179,84 @@ struct MemberCard: View {
     let member: HallOfFameMember
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .topLeading) {
-                // 头像/照片：使用 16:9 的固定比例容器 + overlay 裁切，彻底解决拉伸问题
-                Color.clear
-                    .frame(maxWidth:.infinity)
-                    .aspectRatio(16/9, contentMode: .fit)
-                    .overlay {
-                        AsyncImage(url: URL(string: member.photo)) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill() // 等比例填充并裁切
-                            default:
-                                ZStack {
-                                    Rectangle()
-                                        .fill(member.termColor.gradient)
-                                    Text(member.name.prefix(2))
-                                        .font(.title2.bold())
-                                        .foregroundStyle(.white)
-                                }
-                            }
-                        }
-                    }
-                    .clipped() // 剪裁超出的部分
-                
-                // 届别 Badge
-                Text("\(member.term) 届")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(member.termColor, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .padding(8)
+        ZStack {
+            // 1. 背景层：照片 / 届别色渐变占位
+            if member.photo.isEmpty {
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [member.termColor.opacity(0.6), member.termColor],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                Text(String(member.name.prefix(2)))
+                    .font(.system(size: 40, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+            } else {
+                FeishuAsyncImage(
+                    urlString: member.photo,
+                    placeholderName: member.name,
+                    placeholderText: String(member.name.prefix(2)),
+                    placeholderColors: [member.termColor.opacity(0.6), member.termColor]
+                )
             }
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            
-            // 文本信息
-            VStack(alignment: .leading, spacing: 4) {
+        }
+        .aspectRatio(3/4, contentMode: .fill)
+        .overlay {
+            // 2. 底部渐变遮罩：保证白字在照片上清晰可读
+            GeometryReader { proxy in
+                LinearGradient(
+                    colors: [.clear, Color.black.opacity(0.6)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: proxy.size.height * 0.55)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+            }
+            .allowsHitTesting(false)
+        }
+        .overlay(alignment: .topTrailing) {
+            // 3. 右上角届数角标（恢复每届主题色）
+            Text("第\(chineseTerm(member.term))届")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    member.termColor,
+                    in: Capsule()
+                )
+                .padding(8)
+        }
+        .overlay(alignment: .bottomLeading) {
+            // 4. 左下角姓名 / 职务
+            VStack(alignment: .leading, spacing: 3) {
                 Text(member.name)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
                 Text(member.role)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.8))
                     .lineLimit(1)
             }
-            .padding(.horizontal, 4)
-            .padding(.bottom, 6)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .bottomLeading)
         }
-        .padding(8)
-        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        // 所有图层（照片、遮罩、角标、文字）统一裁剪，避免遮罩把圆角盖成直角
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 4)
+        .shadow(color: .black.opacity(0.04), radius: 6, x: 0, y: 3)
         .contentShape(
             RoundedRectangle(
                 cornerRadius: 16,
                 style: .continuous
             )
         )
-        .accessibilityLabel(
-            "\(member.name)，\(member.role)"
-        )
-        .accessibilityHint(
-            "双击查看详细信息"
-        )
-    }
-}
-
-// MARK: - 筛选胶囊按钮
-struct FilterChip: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.subheadline.weight(isSelected ? .bold : .medium))
-                .padding(.horizontal,16)
-                .frame(minHeight:44)
-                .background(isSelected ? Color.primary : Color(uiColor: .secondarySystemFill))
-                .foregroundStyle(isSelected ? Color(uiColor: .systemBackground) : Color.primary)
-                .clipShape(Capsule())
-        }
-        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(member.name)，\(member.role)，第\(chineseTerm(member.term))届")
+        .accessibilityHint("打开成员详情")
     }
 }
 
@@ -220,8 +267,7 @@ struct MemberDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            // 1. 主内容滚动区域
+        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     // 大图封面
@@ -246,6 +292,7 @@ struct MemberDetailSheet: View {
                         }
                         .clipped()
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .accessibilityHidden(true)
                     
                     // 详情文本及图表
                     VStack(alignment: .leading, spacing: 16) {
@@ -326,22 +373,38 @@ struct MemberDetailSheet: View {
                 .padding(.top, 16) // 稍微拉开一点顶部边距
                 .padding(.bottom, 30)
             }
-            
-            // 2. 右上角悬浮关闭按钮（iOS HIG 质感）
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .bold))
-                    .frame(
-                        width:44,
-                        height:44
-                    )
-                    .foregroundStyle(.secondary)
-                    .background(.ultraThinMaterial, in: Circle()) // 毛玻璃悬浮圆圈
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    closeButton
+                }
             }
-            .padding(.trailing, 24)
-            .padding(.top, 24)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    // 关闭按钮：放在 sheet 导航栏工具栏，iOS 26 用液态玻璃，旧版本回退毛玻璃
+    private var closeButton: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                // iOS 26 官方关闭按钮角色：系统自动渲染圆形液态玻璃 xmark
+                Button(role: .close) {
+                    dismiss()
+                }
+            } else {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .frame(width: 44, height: 44)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .background(.ultraThinMaterial, in: Circle())
+                .accessibilityLabel("关闭")
+                .accessibilityHint("关闭成员详情")
+            }
         }
     }
 }
@@ -504,8 +567,8 @@ struct FlowLayout: Layout {
 // MARK: - 成员完整数据 (移植自 HTML)
 let allMembers: [HallOfFameMember] = [
     // 第一届
-    HallOfFameMember(id: "mayuzhang", name: "马雨璋", term: 1, role: "联合创始人 / 社长", tags: ["创社核心","影视创作","传媒中心","《苏迷》"], contribution: "确立树莓社以影视创作为核心的社团定位，创立传媒中心。领导制作纪录片《苏迷》，带领社员参加48小时电影马拉松比赛。", quote: "相信影像的力量！\n技术会迭代，但影像传达的热情不会。只要电影梦还在，我们就有存在的价值。", grades: ["A","∞","B","A","A","C"], archive: "《数媒社创社策划案》", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/mayuzhang.webp"),
-    HallOfFameMember(id: "shensunfeng", name: "沈孙丰", term: 1, role: "联合创始人 / 社长 / 组委会主席", tags: ["组委会","民主改革","三项业务划分","树莓文化"], contribution: "提出用\"树莓\"代替\"数字媒体\"，主导社团管理体制民主改革，起草《社团章程》。联合发起树莓派援助武汉抗疫募捐活动。", quote: "既然\"数字媒体\"听起来太专业、太遥远，那我们就用\"树莓\"来拉近影像与每个人的距离。\n制度的存在不是为了约束，而是为了让每一个创意都能在科学的轨道上精准落地。", grades: ["A","B","∞","A","A","A"], archive: "《苏州中学树莓社章程》", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/shensunfeng.webp"),
+    HallOfFameMember(id: "mayuzhang", name: "马雨璋", term: 1, role: "联合创始人 / 社长", tags: ["创社核心","影视创作","传媒中心","《苏迷》"], contribution: "确立树莓社以影视创作为核心的社团定位，创立传媒中心。领导制作纪录片《苏迷》，带领社员参加48小时电影马拉松比赛。任职期间，社团承包了学校公众号 99% 的视频与 60% 的照片，获首届“范仲淹奖学金·先忧后乐奖”，并把树莓社推向校园之外的更广阔舞台。", quote: "相信影像的力量！\n在学生时代，每个人都曾怀揣“我想做这样的事，我想要这样生活“的理想，而那颗红彤彤的”树莓“，正象征着我们十几岁、二十几岁时的青春之心。\n树莓所传递的，不仅仅是一种人生态度，更多的是一种生活方式。\n技术会迭代，但影像传达的热情不会。保持初心，勇敢跨越困难，去创造属于自己的世界。", grades: ["A","∞","B","A","A","C"], archive: "《数媒社创社策划案》", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/mayuzhang.webp"),
+    HallOfFameMember(id: "shensunfeng", name: "沈孙丰", term: 1, role: "联合创始人 / 社长 / 组委会主席", tags: ["组委会","民主改革","三项业务划分","树莓文化"], contribution: "提出用“树莓”代替“数字媒体”，主导民主集中制与组委会制改革，起草《苏州中学树莓社章程》，制定民主换届规则，确立影视创作、数字媒体、新闻传播三项核心业务划分，推动社团氛围与“树莓文化”建设，联合发起树莓派援助武汉抗疫募捐活动。", quote: "既然“数字媒体”听起来太专业、太遥远，那我们就用“树莓”来拉近影像与每个人的距离。\n制度的存在不是为了约束，而是为了让每一个创意都能在科学的轨道上精准落地。", grades: ["A","B","∞","A","A","A"], archive: "《苏州中学树莓社章程》", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/shensunfeng.webp"),
     HallOfFameMember(id: "zhangshihan", name: "张诗菡", term: 1, role: "联合创始人 / 副社长", tags: ["视觉设计","树莓酱","树莓文化"], contribution: "创造了树莓社看板娘形象并主导早期视觉体系，为树莓社社团文化的发展奠定基础。", quote: "虽然我们只是学生组织，我们的影响力绝不应被预设边界。树莓社将用行动证明，影像的力量可以深入到社会的各个领域之中。", grades: ["B","B","A","C","A","C"], archive: "", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/zhangshihan.webp"),
     
     // 第二届
@@ -532,7 +595,16 @@ let allMembers: [HallOfFameMember] = [
     HallOfFameMember(id: "wangyanran", name: "王嫣然", term: 6, role: "副社长 / 代理社长", tags: ["画纸共创","创作者权益"], contribution: "开创树莓社 QQ 宣发阵地，主导\"共享相册\"活动。在社团联盟成立仪式上发表《保障创作者权益倡议》。执笔第六届年度工作报告。", quote: "当我们的感受跃然纸上，记忆便成为了作品。", grades: ["B","A","A","B","A","∞"], archive: "树莓社 2024 年国旗下讲话", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/wangyanran.webp"),
     
     // 第七届
-    HallOfFameMember(id: "yangziyan", name: "杨梓言", term: 7, role: "第七任社长", tags: ["全媒体矩阵","伟大完成论"], contribution: "建成全媒体传播矩阵（累计传播超 20 万次）。面对 AI 冲击提出\"伟大完成论\"，强调\"从单纯技术传授升华为创意火种的传递\"。", quote: "让那些转瞬即逝的声音可以被听见，让每一个创意都拥有落地生长的土壤。", grades: ["A","B","B","A","A","A"], archive: "《守温度、传火种、向未来》", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/yangziyan.webp"),
+    HallOfFameMember(id: "yangziyan",
+                     name: "杨梓言",
+                     term: 7,
+                     role: "第七任社长",
+                     tags: ["全媒体矩阵","伟大完成论"],
+                     contribution: "建成全媒体传播矩阵（累计传播超 20 万次）。面对 AI 冲击提出“伟大完成论”，强调“从单纯技术传授升华为创意火种的传递”。",
+                     quote: "社团活动出于兴趣但是要坚持有责任心，将社团做优做质，让每一位社员在活动中收获快乐与实践的经验知识。/n创作不能只停留在技术层面，更需要向下挖掘深度。/n让那些转瞬即逝的声音可以被听见，让每一个创意都拥有落地生长的土壤。",
+                     grades: ["A","B","B","A","A","A"],
+                     archive: "《守温度、传火种、向未来》",
+                     photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/yangziyan.webp"),
     HallOfFameMember(id: "luoanqi", name: "雒安琪", term: 7, role: "传媒中心负责人", tags: ["问道山下广播","抖音平台","传媒中心"], contribution: "运营《问道山下》广播节目。发起创建小红书账号，创立抖音账号，推动校园传媒业务创新与时代化改革。", quote: "", grades: ["B","B","A","B","C","A"], archive: "", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/luoanqi.webp"),
     HallOfFameMember(id: "zhujingxuan",
                      name: "朱璟煊",

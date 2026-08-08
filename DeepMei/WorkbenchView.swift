@@ -135,13 +135,12 @@ private struct EntryCard: View {
         switch item.target {
         case .webView(let url, let title, let hideTopBar, let fullscreenLandscape):
             NavigationLink {
-                WebView(url: URL(string: url.contains("?") ? "\(url)&t=\(Date().timeIntervalSince1970)" : "\(url)?t=\(Date().timeIntervalSince1970)")!)
-                    .ignoresSafeArea(edges: .bottom)
-                    .navigationTitle(title)
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar(.hidden, for: .tabBar)
-                    .toolbar(hideTopBar ? .hidden : .visible, for: .navigationBar)
-                    .modifier(FullscreenLandscapeModifier(enabled: fullscreenLandscape))
+                ImmersiveWebView(
+                    url: URL(string: url.contains("?") ? "\(url)&t=\(Date().timeIntervalSince1970)" : "\(url)?t=\(Date().timeIntervalSince1970)")!,
+                    title: title,
+                    hideTopBar: hideTopBar,
+                    fullscreenLandscape: fullscreenLandscape
+                )
             } label: {
                 CardContent(item: item, common: common)
             }
@@ -156,6 +155,66 @@ private struct EntryCard: View {
             }
             .buttonStyle(.plain)
         }
+    }
+}
+
+// MARK: - 沉浸式网页容器
+
+/// 全屏横屏 / 隐藏导航栏的网页容器。
+///
+/// iOS 没有 Android 那样的系统返回键，隐藏导航栏后必须提供显式返回出口：
+/// 左上角悬浮半透明返回按钮（适配刘海屏安全区），同时保留 iOS 边缘右滑返回手势。
+private struct ImmersiveWebView: View {
+    let url: URL
+    let title: String
+    let hideTopBar: Bool
+    let fullscreenLandscape: Bool
+
+    var body: some View {
+        WebView(url: url)
+            .ignoresSafeArea(edges: .bottom)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .tabBar)
+            .toolbar(hideTopBar ? .hidden : .visible, for: .navigationBar)
+            .modifier(FullscreenLandscapeModifier(enabled: fullscreenLandscape))
+            .overlay {
+                if hideTopBar {
+                    GeometryReader { proxy in
+                        VStack {
+                            HStack {
+                                FloatingBackButton()
+                                    .padding(.leading, max(proxy.safeAreaInsets.leading, 12))
+                                    .padding(.top, max(proxy.safeAreaInsets.top, 8))
+                                Spacer()
+                            }
+                            Spacer()
+                        }
+                    }
+                }
+            }
+    }
+}
+
+/// 悬浮返回按钮：半透明黑底 + 白色返回箭头。
+private struct FloatingBackButton: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Button {
+            dismiss()
+        } label: {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(.black.opacity(0.45), in: Circle())
+                .overlay(
+                    Circle()
+                        .stroke(.white.opacity(0.2), lineWidth: 1)
+                )
+        }
+        .accessibilityLabel("返回")
     }
 }
 

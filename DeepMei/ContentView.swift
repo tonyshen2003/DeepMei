@@ -8,11 +8,12 @@
 import SwiftUI
 import WebKit
 
-private enum MainTab: Hashable {
+enum MainTab: Hashable {
     case home
     case library
     case activities
     case mine
+    case profile
 }
 
 struct ContentView: View {
@@ -21,7 +22,7 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             // MARK: - 探索
-            HomeNavigationView()
+            HomeNavigationView(selectedTab: $selectedTab)
                 .tabItem {
                     Label(
                         "首页",
@@ -68,6 +69,16 @@ struct ContentView: View {
                 )
             }
             .tag(MainTab.mine)
+
+            // MARK: - 个人中心
+            ProfileView()
+                .tabItem {
+                    Label(
+                        "个人中心",
+                        systemImage: "person.circle.fill"
+                    )
+                }
+                .tag(MainTab.profile)
         }
     }
 }
@@ -75,7 +86,8 @@ struct ContentView: View {
 // MARK: - 首页
 
 struct HomeNavigationView: View {
-    @State private var showRegisterSheet = false
+    @Binding var selectedTab: MainTab
+    @ObservedObject private var loginManager = LoginManager.shared
     @State private var emojiIndex: Int = Int.random(in: 1...49)
 
     var body: some View {
@@ -154,6 +166,29 @@ struct HomeNavigationView: View {
             }
             .navigationTitle("欢迎！")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        selectedTab = .profile
+                    } label: {
+                        Group {
+                            if loginManager.isLoggedIn, !loginManager.loggedInAvatarUrl.isEmpty {
+                                FeishuAsyncImage(
+                                    urlString: loginManager.loggedInAvatarUrl,
+                                    placeholderName: loginManager.loggedInName,
+                                    contentMode: .fill
+                                )
+                            } else {
+                                Image("ClubLogo")
+                                    .resizable()
+                                    .scaledToFill()
+                            }
+                        }
+                        .frame(width: 32, height: 32)
+                        .clipShape(Circle())
+                    }
+                    .accessibilityLabel("个人中心")
+                }
+
                 ToolbarItem(
                     placement: .topBarTrailing
                 ) {
@@ -166,8 +201,8 @@ struct HomeNavigationView: View {
                 ToolbarItem(
                     placement: .topBarTrailing
                 ) {
-                    Button {
-                        showRegisterSheet = true
+                    NavigationLink {
+                        CheckInView()
                     } label: {
                         Image(
                             systemName:
@@ -176,43 +211,11 @@ struct HomeNavigationView: View {
                     }
                 }
             }
-            .sheet(
-                isPresented:
-                    $showRegisterSheet
-            ) {
-                NavigationStack {
-                    WebView(
-                        url:
-                            URL(
-                                string:
-                                    "https://cqbxhfrnwy.coze.site?t=\(Date().timeIntervalSince1970)"
-                            )!
-                    )
-                    .navigationTitle(
-                        "活动签到"
-                    )
-                    .navigationBarTitleDisplayMode(
-                        .inline
-                    )
-                    .toolbar {
-                        ToolbarItem(
-                            placement:
-                                    .topBarLeading
-                        ) {
-                            Button(
-                                "关闭"
-                            ) {
-                                showRegisterSheet = false
-                            }
-                        }
-                    }
+            .onAppear {
+                withAnimation(.easeIn(duration: 1.0)) {
+                    emojiIndex = Int.random(in: 1...49)
                 }
             }
-            .onAppear {
-                            withAnimation(.easeIn(duration: 1.0)) { // 使用 .easeIn 淡入效果更自然
-                                emojiIndex = Int.random(in: 1...49)
-                            }
-                        }
         }
     }
 }
@@ -307,13 +310,19 @@ struct ArticleListView: View {
                     symbol: "doc.text"
                 ),
                 Article(
-                    title: "第四届社长工作报告",
-                    subtitle: "汪翊扬社长",
+                    title: "第四届社员大会工作报告",
+                    subtitle: "朱奕社长",
+                    fileName: "report-2022-annual-zhuyi",
+                    symbol: "doc.text"
+                ),
+                Article(
+                    title: "第五届社员大会工作报告",
+                    subtitle: "汪翊扬社长等",
                     fileName: "report-2023-5th-wangyiyang",
                     symbol: "doc.text"
                 ),
                 Article(
-                    title: "第五届社长工作报告",
+                    title: "第六届社员大会社长工作报告",
                     subtitle: "李谦社长",
                     fileName: "report-2023-6th-liqian",
                     symbol: "doc.text"
@@ -325,7 +334,7 @@ struct ArticleListView: View {
                     symbol: "doc.text"
                 ),
                 Article(
-                    title: "第七届社长工作报告",
+                    title: "第八届社员大会社长工作报告",
                     subtitle: "杨梓言社长",
                     fileName: "SMS-RC_C8_President_Report_2026",
                     symbol: "doc.text"

@@ -9,10 +9,15 @@ import SwiftUI
 
 @main
 struct DeepMeiApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .task {
+                    // 把手机端当前登录态同步给 Apple Watch
+                    WatchSessionManager.shared.syncLoginState()
+
                     // 启动时并行预取，让第一次进入各页面即可命中缓存：
                     // 1. 工作台入口列表（切到工作台 tab 时零等待）
                     // 2. 社员资料快照（首次查询直接命中本地缓存，秒开 / 离线可用）
@@ -26,6 +31,12 @@ struct DeepMeiApp: App {
                                 _ = await MemberSnapshotCache.shared.refresh()
                             }
                         }
+                    }
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    if newPhase == .active {
+                        // 回到前台时重试同步（手表 App 可能刚刚安装完成）
+                        WatchSessionManager.shared.syncLoginState()
                     }
                 }
         }
