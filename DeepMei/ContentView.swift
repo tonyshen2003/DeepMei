@@ -143,15 +143,32 @@ struct HomeNavigationView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    ActionCard(
-                        title: "文创与周边",
-                        subtitle:
-                            "树莓酱IP、卡套与原创贴纸",
-                        icon:
-                            "paintpalette.fill",
-                        iconColor:
-                                .purple
-                    )
+                    NavigationLink {
+                        WebView(
+                            url:
+                                URL(
+                                    string:
+                                        "https://raspjam.com?t=\(Date().timeIntervalSince1970)"
+                                )!
+                        )
+                        .navigationTitle(
+                            "树莓酱专属企划"
+                        )
+                        .navigationBarTitleDisplayMode(
+                            .inline
+                        )
+                    } label: {
+                        ActionCard(
+                            title: "文创与周边",
+                            subtitle:
+                                "树莓酱IP、卡套与原创贴纸",
+                            icon:
+                                "paintpalette.fill",
+                            iconColor:
+                                    .purple
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding()
             }
