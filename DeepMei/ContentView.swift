@@ -55,17 +55,17 @@ struct ContentView: View {
             .ignoresSafeArea()
             .tabItem {
                 Label(
-                    "我的树莓",
+                    "社员查询",
                     systemImage: "star.fill"
                 )
             }
             .tag(MainTab.mine)
 
-            // MARK: - 个人中心
+            // MARK: - 我的树莓（个人中心）
             ProfileView()
                 .tabItem {
                     Label(
-                        "个人中心",
+                        "我的树莓",
                         systemImage: "person.circle.fill"
                     )
                 }
@@ -240,7 +240,7 @@ struct HomeNavigationView: View {
             .modifier(AvatarCircularGlass())
         }
         .frame(minWidth: 44, minHeight: 44)
-        .accessibilityLabel("个人中心")
+        .accessibilityLabel("我的树莓")
     }
 }
 

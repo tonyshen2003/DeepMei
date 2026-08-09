@@ -288,6 +288,49 @@ actor MemberService {
         try await searchMembers(byNameOrCodeOrAlias: query).first
     }
 
+    /// 通过 NFC 卡号查询社员（与 Android searchByCardId 对齐）。
+    /// 卡号格式为大写十六进制（如 A1B2C3D4），与飞书 Bitable「社员卡号」字段一致。
+    func searchByCardId(cardId: String) async throws -> RaspberryMember? {
+        let normalized = cardId
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+            .replacingOccurrences(of: ":", with: "")
+        guard !normalized.isEmpty else { return nil }
+
+        let token = try await getTenantAccessToken()
+        let filterFormula = "CurrentValue.[社员卡号] = \"\(normalized)\""
+
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/open-apis/bitable/v1/apps/\(appToken)/tables/\(tableId)/records"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "filter", value: filterFormula),
+            URLQueryItem(name: "page_size", value: "1")
+        ]
+
+        guard let requestURL = components.url else {
+            throw MemberServiceError.invalidURL
+        }
+
+        var req = URLRequest(url: requestURL)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+            throw MemberServiceError.httpError((resp as? HTTPURLResponse)?.statusCode ?? -1)
+        }
+
+        let decoded = try JSONDecoder().decode(LarkRecordListResponse.self, from: data)
+        guard decoded.code == 0 else {
+            throw MemberServiceError.apiError(code: decoded.code, message: decoded.msg)
+        }
+
+        guard let item = decoded.data?.items?.first else { return nil }
+        return await Self.mapRecord(fields: item.fields)
+    }
+
     // MARK: Token 鉴权
     func getTenantAccessToken() async throws -> String {
         if let cached = cachedToken, let exp = tokenExpiry, exp > Date().addingTimeInterval(60) {
@@ -477,7 +520,7 @@ nonisolated extension StoredMemberSnapshot: Encodable {}
 /// 社员资料本地快照缓存（与 Android MemberSnapshotCache 对齐）：
 /// - 查询优先命中本地快照，秒开、离线可用；
 /// - 快照超过 24h 视为过期，查询时后台静默刷新；
-/// - 也提供手动刷新（我的树莓右上角按钮）。
+/// - 也提供手动刷新（社员查询右上角按钮）。
 actor MemberSnapshotCache {
     static let shared = MemberSnapshotCache()
 
@@ -558,6 +601,28 @@ actor MemberSnapshotCache {
     /// 单条精确查找（取第一条）。
     func findMember(query: String) async -> RaspberryMember? {
         await findMembers(query: query).first
+    }
+
+    /// 按 NFC 卡号在快照中查找（支持分号分隔的多卡号；与 Android findMemberByCard 对齐）。
+    func findMemberByCard(cardId: String) async -> RaspberryMember? {
+        guard let stored = await load() else { return nil }
+        let normalized = cardId
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+            .replacingOccurrences(of: ":", with: "")
+        guard !normalized.isEmpty else { return nil }
+
+        guard let item = stored.snapshot.items.first(where: { item in
+            let cardText = item.fields["社员卡号"]?.flattenedText ?? ""
+            return cardText
+                .split(separator: ";")
+                .contains { $0.trimmingCharacters(in: .whitespaces).uppercased() == normalized }
+        }) else { return nil }
+
+        let mapped = await MainActor.run(resultType: RaspberryMember?.self) {
+            MemberService.mapRecord(fields: item.fields)
+        }
+        return mapped
     }
 
     /// 签到页专用：按卡号/识别码/社员编号精确匹配快照，未命中返回 nil。

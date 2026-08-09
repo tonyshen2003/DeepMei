@@ -98,6 +98,7 @@ struct CheckInView: View {
     @State private var includeLocation = true
     @State private var locationDenied = AppLocationService.shared.isDenied
     @State private var scanning = false
+    @State private var isReadingNFC = false
     @State private var showManualSheet = false
     @State private var recents: [RecentCheckIn] = []
     @State private var toast: String?
@@ -124,6 +125,9 @@ struct CheckInView: View {
                     IdleScene(
                         savedActivity: activityName,
                         recents: recents,
+                        nfcAvailable: NFCUIDReader.isReadingAvailable,
+                        isReadingNFC: isReadingNFC,
+                        onNFC: startNFCRead,
                         onScan: { scanning = true },
                         onManual: { showManualSheet = true },
                         onRecentClick: { recent in
@@ -288,6 +292,25 @@ struct CheckInView: View {
         }
     }
 
+    // MARK: - NFC 读卡
+
+    private func startNFCRead() {
+        guard !isReadingNFC else { return }
+        isReadingNFC = true
+        Task {
+            do {
+                let uid = try await NFCUIDReader.shared.readUID()
+                isReadingNFC = false
+                lookup(uid)
+            } catch NFCReadError.canceled {
+                isReadingNFC = false
+            } catch {
+                isReadingNFC = false
+                showToast("NFC 读取失败：\(error.localizedDescription)")
+            }
+        }
+    }
+
     private func submit() {
         guard case let .cardRevealed(member, cardId, submitting, submitted) = stage,
               !submitting, !submitted else { return }
@@ -387,6 +410,9 @@ struct CheckInView: View {
 private struct IdleScene: View {
     let savedActivity: String
     let recents: [RecentCheckIn]
+    let nfcAvailable: Bool
+    let isReadingNFC: Bool
+    let onNFC: () -> Void
     let onScan: () -> Void
     let onManual: () -> Void
     let onRecentClick: (RecentCheckIn) -> Void
@@ -418,7 +444,7 @@ private struct IdleScene: View {
                 VStack(spacing: 12) {
                     ScanRadar()
                         .frame(width: 100, height: 100)
-                    Text("扫码或输入识别码")
+                    Text(nfcAvailable ? "贴卡、扫码或输入识别码" : "扫码或输入识别码")
                         .font(.title3.weight(.semibold))
                     Text("识别后自动亮出社员卡，一键盖章签到")
                         .font(.footnote)
@@ -432,18 +458,49 @@ private struct IdleScene: View {
                         .stroke(Color.primary.opacity(0.12), lineWidth: 1.5)
                 )
 
-                HStack(spacing: 10) {
-                    Button(action: onScan) {
-                        Label("扫码签到", systemImage: "qrcode.viewfinder")
-                            .frame(maxWidth: .infinity)
+                if nfcAvailable {
+                    Button(action: onNFC) {
+                        HStack(spacing: 6) {
+                            if isReadingNFC {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "wave.3.right")
+                            }
+                            Text("NFC 贴卡")
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(isReadingNFC)
 
-                    Button(action: onManual) {
-                        Label("手动输入", systemImage: "keyboard")
-                            .frame(maxWidth: .infinity)
+                    HStack(spacing: 10) {
+                        Button(action: onScan) {
+                            Label("扫码签到", systemImage: "qrcode.viewfinder")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button(action: onManual) {
+                            Label("手动输入", systemImage: "keyboard")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.bordered)
+                } else {
+                    HStack(spacing: 10) {
+                        Button(action: onScan) {
+                            Label("扫码签到", systemImage: "qrcode.viewfinder")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button(action: onManual) {
+                            Label("手动输入", systemImage: "keyboard")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
 
                 if !recents.isEmpty {
@@ -476,7 +533,7 @@ private struct IdleScene: View {
                     Circle()
                         .fill(Color.green)
                         .frame(width: 8, height: 8)
-                    Text("支持扫码与手动输入")
+                    Text(nfcAvailable ? "支持 NFC 贴卡 · 扫码 · 手动输入" : "支持扫码与手动输入")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }

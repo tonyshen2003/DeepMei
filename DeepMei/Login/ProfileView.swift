@@ -2,7 +2,7 @@
 //  ProfileView.swift
 //  DeepMei
 //
-//  个人中心（符合 Apple HIG）：底部 Tab + Grouped List（设置页范式）。
+//  我的树莓（个人中心，符合 Apple HIG）：底部 Tab + Grouped List（设置页范式）。
 //  与 Android 的 M3 Navigation Drawer 对齐功能，但使用 iOS 原生信息架构：
 //  - 顶级导航交给 Tab Bar；
 //  - 登录卡片、主要功能、法律信息、退出登录都用 List Section 分组呈现。
@@ -21,6 +21,11 @@ struct ProfileView: View {
                 }
 
                 Section("主要功能") {
+                    NavigationLink {
+                        MyMemberCardView()
+                    } label: {
+                        Label("我的社员卡", systemImage: "person.text.rectangle")
+                    }
                     NavigationLink {
                         CheckInView()
                     } label: {
@@ -65,7 +70,7 @@ struct ProfileView: View {
                     }
                 }
             }
-            .navigationTitle("个人中心")
+            .navigationTitle("我的树莓")
             .navigationBarTitleDisplayMode(.large)
         }
     }

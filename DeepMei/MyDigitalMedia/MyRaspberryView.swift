@@ -228,9 +228,11 @@ struct MyRaspberryView: View {
     @State private var searchText: String = ""
     @State private var isSearching: Bool = false
     @State private var notFound: Bool = false
+    @State private var notFoundMessage = "请核对输入的社员姓名或编号（如 No.00001）后重新搜索"
     @State private var serviceError: String?
     @State private var isRefreshingSnapshot = false
     @State private var refreshMessage: String?
+    @State private var isReadingNFC = false
     @FocusState private var isFocused: Bool
 
     private var selectedMember: RaspberryMember? {
@@ -286,11 +288,12 @@ struct MyRaspberryView: View {
                         ContentUnavailableView {
                             Label("未找到该社员", systemImage: "person.slash.fill")
                         } description: {
-                            Text("请核对输入的社员姓名或编号（如 No.00001）后重新搜索")
+                            Text(notFoundMessage)
                         } actions: {
                             Button("重新搜索") {
                                 searchText = ""
                                 notFound = false
+                                notFoundMessage = "请核对输入的社员姓名或编号（如 No.00001）后重新搜索"
                             }
                             .buttonStyle(.borderedProminent)
                         }
@@ -310,11 +313,11 @@ struct MyRaspberryView: View {
                         ContentUnavailableView {
                             Label("身份识别", systemImage: "person.crop.rectangle.badge.plus")
                         } description: {
-                            Text("在上方搜索框输入社员姓名或认证识别码以检索履历")
+                            Text("在上方搜索框输入社员姓名或认证识别码，或点右上角 NFC 图标贴卡识别")
                         }
                     }
                 }
-                .navigationTitle("我的树莓")
+                .navigationTitle("社员查询")
                 .navigationBarTitleDisplayMode(.large)
                 // 💡 改用苹果原生 searchable，适配系统搜索交互
                 .searchable(
@@ -339,14 +342,20 @@ struct MyRaspberryView: View {
                         }
                     }
 
-                    // 退出登录（与 Android 工具栏一致）
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            LoginManager.shared.logout()
-                        } label: {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                    // NFC 贴卡识别（与 Android「将社员卡贴近手机背面自动识别」对齐）
+                    if NFCUIDReader.isReadingAvailable {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button(action: startNFCRead) {
+                                if isReadingNFC {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: "wave.3.right")
+                                }
+                            }
+                            .disabled(isReadingNFC)
+                            .accessibilityLabel("贴卡识别")
+                            .accessibilityHint("将社员卡靠近 iPhone 后自动查询")
                         }
-                        .accessibilityLabel("退出登录")
                     }
 
                     // 手动刷新社员资料快照
@@ -395,6 +404,7 @@ struct MyRaspberryView: View {
             selectedIndex = -1
             searchText = ""
             notFound = false
+            notFoundMessage = "请核对输入的社员姓名或编号（如 No.00001）后重新搜索"
         }
     }
 
@@ -402,6 +412,7 @@ struct MyRaspberryView: View {
         isFocused = false
         isSearching = true
         notFound = false
+        notFoundMessage = "请核对输入的社员姓名或编号（如 No.00001）后重新搜索"
         serviceError = nil
 
         let query = searchText
@@ -442,6 +453,78 @@ struct MyRaspberryView: View {
                     isSearching = false
                     serviceError = error.localizedDescription
                 }
+            }
+        }
+    }
+
+    // MARK: - NFC 贴卡识别
+
+    private func startNFCRead() {
+        guard !isReadingNFC else { return }
+        isReadingNFC = true
+        Task {
+            do {
+                let cardId = try await NFCUIDReader.shared.readUID()
+                isReadingNFC = false
+                lookupByCardId(cardId)
+            } catch NFCReadError.canceled {
+                isReadingNFC = false
+            } catch {
+                isReadingNFC = false
+                showToast("NFC 读取失败：\(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func lookupByCardId(_ cardId: String) {
+        isSearching = true
+        notFound = false
+        serviceError = nil
+        Task {
+            do {
+                // 快照缓存优先（秒开/离线可用），未命中再回退飞书实时查询
+                let cached = await MemberSnapshotCache.shared.findMemberByCard(cardId: cardId)
+                let found: RaspberryMember?
+                if let cached {
+                    found = cached
+                } else {
+                    found = try await MemberService.shared.searchByCardId(cardId: cardId)
+                }
+                await MainActor.run {
+                    isSearching = false
+                    if let found {
+                        if cached == nil {
+                            // 新卡在线命中后后台刷新快照，下次即可秒开
+                            Task { _ = await MemberSnapshotCache.shared.refresh() }
+                        }
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                            members = [found]
+                            selectedIndex = 0
+                        }
+                    } else {
+                        members = []
+                        selectedIndex = -1
+                        notFound = true
+                        notFoundMessage = "未找到该卡号对应的社员，请确认卡片已登记"
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isSearching = false
+                    serviceError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func showToast(_ message: String) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            refreshMessage = message
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            withAnimation(.easeIn(duration: 0.25)) {
+                refreshMessage = nil
             }
         }
     }

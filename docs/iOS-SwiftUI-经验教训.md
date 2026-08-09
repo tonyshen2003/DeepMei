@@ -227,7 +227,7 @@ let mapped = await MainActor.run(resultType: RaspberryMember?.self) {
 - **免费 Apple 开发者账号没有 NFC 能力**：iOS 不做 NFC 贴卡/全局亮卡，
   签到用扫码 + 手动输入；隐私政策、用户协议等文档不要写 NFC。
 - **iPhone 没有抽屉范式**：不要照搬 Android 的 M3 Navigation Drawer。
-  个人中心改为**第 5 个底部 Tab + Grouped List**（设置页样式），符合 HIG。
+  个人中心改为**第 5 个底部 Tab（现名「我的树莓」）+ Grouped List**（设置页样式），符合 HIG。
 - **全屏横屏网页要有显式返回**：iOS 没有系统返回键；隐藏导航栏时
   左上角放悬浮返回按钮（适配安全区），保留边缘右滑。
 - **品牌色**：AccentColor 浅色 `#942B38`、深色 `#FFB3B7`（树莓红，与 Android M3 同源）；

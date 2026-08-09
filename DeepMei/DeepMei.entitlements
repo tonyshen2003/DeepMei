@@ -2,9 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NFCReaderUsageDescription</key>
-	<string>用于活动签到与社员身份识别时读取树莓社 NFC 社员卡</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
+	<key>com.apple.developer.nfc.readersession.formats</key>
+	<array>
+		<string>NDEF</string>
+		<string>TAG</string>
+	</array>
 </dict>
 </plist>
