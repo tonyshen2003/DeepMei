@@ -14,20 +14,24 @@ import Foundation
 // MARK: - 跳转目标
 
 /// 入口点击后的跳转目标。用枚举关联值而非裸 URL，使数据层完全不关心导航实现。
-enum ActivityTarget: Hashable, Sendable {
+nonisolated enum ActivityTarget: Hashable, Sendable {
     /// 打开网页（外部站点或内部页面，如签到 / 报名页）
     case webView(url: String, title: String, hideTopBar: Bool = false, fullscreenLandscape: Bool = false)
     /// 打开应用内 Markdown 文章（如活动须知、活动回顾），fileName 不含 .md 扩展名
     case markdown(fileName: String, title: String)
 }
 
-// MARK: - 业务分组
+// MARK: - 业务分组配置
 
-/// 入口所属的业务分组，用于在页面内分区展示，并用品牌语义色着色图标容器。
-enum ServiceGroup: String, CaseIterable, Sendable {
-    case activity = "活动"
-    case resource = "资源"
-    case media   = "媒体"
+/// 分组配置：名称、默认图标、颜色、排序。
+/// 优先从飞书「工作台分组配置」表拉取；拉取失败或表为空时使用 defaultGroups 兜底。
+nonisolated struct WorkbenchGroup: Identifiable, Hashable, Sendable {
+    let name: String
+    var iconKey: String
+    var colorKey: String
+    var sort: Int
+
+    var id: String { name }
 }
 
 // MARK: - 入口项
@@ -38,22 +42,22 @@ enum ServiceGroup: String, CaseIterable, Sendable {
 ///   - id:       唯一标识，用于列表 key（建议英文短名，如 "signup"）
 ///   - title:    入口标题
 ///   - subtitle: 一句话简介
-///   - group:    所属业务分组，决定分区与图标容器配色
+///   - group:    所属业务分组名称（与配置表「分组名称」对应）
 ///   - common:   是否为高频入口，为 true 时置顶进入「常用」区并以强调卡片呈现
-///   - iconKey:  图标关键字，UI 层据此映射为 SF Symbol（event/home/cloud/book/play/apps）
+///   - iconKey:  图标关键字，UI 层据此映射为 SF Symbol；留空时使用所属分组的默认图标
 ///   - target:   点击跳转目标
-struct ActivityItem: Identifiable, Hashable, Sendable {
+nonisolated struct ActivityItem: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let subtitle: String
-    let group: ServiceGroup
+    let group: String
     let common: Bool
     let iconKey: String
     let target: ActivityTarget
 
     init(id: String, title: String, subtitle: String = "",
-         group: ServiceGroup = .activity, common: Bool = false,
-         iconKey: String = "apps", target: ActivityTarget) {
+         group: String = "活动", common: Bool = false,
+         iconKey: String = "", target: ActivityTarget) {
         self.id = id
         self.title = title
         self.subtitle = subtitle
@@ -64,10 +68,14 @@ struct ActivityItem: Identifiable, Hashable, Sendable {
     }
 }
 
-// MARK: - 分组展示顺序
+// MARK: - 默认分组配置
 
-/// UI 层按此顺序对各分组做分区展示（活动 → 资源 → 媒体）。
-let serviceGroupOrder: [ServiceGroup] = [.activity, .resource, .media]
+/// 内置默认分组：配置表不可用时的兜底方案。
+nonisolated let defaultGroups: [WorkbenchGroup] = [
+    WorkbenchGroup(name: "活动", iconKey: "event", colorKey: "raspberry", sort: 1),
+    WorkbenchGroup(name: "资源", iconKey: "book", colorKey: "blue", sort: 2),
+    WorkbenchGroup(name: "媒体", iconKey: "play", colorKey: "purple", sort: 3)
+]
 
 // MARK: - 本地兜底数据
 
@@ -82,18 +90,19 @@ let serviceGroupOrder: [ServiceGroup] = [.activity, .resource, .media]
 /// 如需同步更新兜底数据，修改下面的列表即可。
 ///
 /// 字段速查：
-///   group   = ServiceGroup.activity / resource / media
+///   group   = "活动" / "资源" / "媒体"（与分组配置表一致）
 ///   common  = true（置顶强调） / false（默认）
-///   iconKey = event / home / cloud / book / play / apps（默认）
+///   iconKey = event / home / cloud / book / play / gamecontroller / film / folder / link
+///             （留空则使用所属分组的默认图标）
 ///   target  = .webView(url: "https://...", title: "标题")
 ///           | .markdown(fileName: "文件名(不含.md)", title: "标题")
-let defaultActivities: [ActivityItem] = [
+nonisolated let defaultActivities: [ActivityItem] = [
     // —— 高频入口：置顶「常用」区 ——
     ActivityItem(
         id: "signup",
         title: "活动签到",
         subtitle: "贴NFC卡或扫码即可签到",
-        group: .activity,
+        group: "活动",
         common: true,
         iconKey: "event",
         target: .webView(url: "https://cqbxhfrnwy.coze.site", title: "活动签到")
@@ -102,7 +111,7 @@ let defaultActivities: [ActivityItem] = [
         id: "zhaoxin",
         title: "树莓招新",
         subtitle: "加入树莓谢谢喵",
-        group: .activity,
+        group: "活动",
         common: true,
         iconKey: "home",
         target: .webView(url: "https://szzxshumei.feishu.cn/share/base/form/shrcnw0A0uJ63KnhABpKyBJfLJV", title: "树莓招新")
@@ -112,7 +121,7 @@ let defaultActivities: [ActivityItem] = [
         id: "questionnaire",
         title: "树莓酱问卷",
         subtitle: "分享你对文创的想法",
-        group: .activity,
+        group: "活动",
         iconKey: "event",
         target: .webView(url: "https://szzxshumei.feishu.cn/share/base/form/shrcnh1MRrXQ19SJx7KmzRmI5Rd", title: "树莓酱问卷")
     ),
@@ -120,7 +129,7 @@ let defaultActivities: [ActivityItem] = [
         id: "coming_of_age",
         title: "高三成人礼",
         subtitle: "照片合集",
-        group: .activity,
+        group: "活动",
         iconKey: "event",
         target: .webView(url: "https://szzxshumei.com/post/2026/2026-coming-of-age-ceremony/", title: "高三成人礼")
     ),
@@ -128,7 +137,7 @@ let defaultActivities: [ActivityItem] = [
         id: "sports_2019",
         title: "2019运动会",
         subtitle: "照片直播",
-        group: .activity,
+        group: "活动",
         iconKey: "play",
         target: .webView(url: "https://m.inmuu.com/v1/photolive/news/143862", title: "2019运动会")
     ),
@@ -136,39 +145,39 @@ let defaultActivities: [ActivityItem] = [
         id: "cloud_genshin",
         title: "云原神",
         subtitle: "",
-        group: .activity,
-        iconKey: "apps",
+        group: "活动",
+        iconKey: "gamecontroller",
         target: .webView(url: "https://ys.mihoyo.com/cloud/#/", title: "云原神", hideTopBar: true, fullscreenLandscape: true)
     ),
     ActivityItem(
         id: "cloud_starrail",
         title: "云·星穹铁道",
         subtitle: "",
-        group: .activity,
-        iconKey: "apps",
+        group: "活动",
+        iconKey: "gamecontroller",
         target: .webView(url: "https://sr.mihoyo.com/cloud/#/", title: "云·星穹铁道", hideTopBar: true, fullscreenLandscape: true)
     ),
     ActivityItem(
         id: "arknights",
         title: "明日方舟",
         subtitle: "",
-        group: .activity,
-        iconKey: "apps",
+        group: "活动",
+        iconKey: "gamecontroller",
         target: .webView(url: "https://cg.163.com/static/game/mrfz?sourcepage=cg&show=mrfz&back=https%3A%2F%2Fcg.163.com%2Findex.html%23%2Fsearch%3Fkey%3D%25E6%2598%258E%25E6%2597%25A5%25E6%2596%25B9%25E8%2588%259F", title: "明日方舟", hideTopBar: true, fullscreenLandscape: true)
     ),
     ActivityItem(
         id: "cloud_zzz",
         title: "云绝区零",
         subtitle: "",
-        group: .activity,
-        iconKey: "apps",
+        group: "活动",
+        iconKey: "gamecontroller",
         target: .webView(url: "https://zzz.mihoyo.com/cloud/#/", title: "云绝区零", hideTopBar: true, fullscreenLandscape: true)
     ),
     ActivityItem(
         id: "tedx_2020",
         title: "Tedxsuzhou2020",
         subtitle: "",
-        group: .activity,
+        group: "活动",
         iconKey: "cloud",
         target: .webView(url: "https://muuau2np7o.zhaopianzhibo.com/v1/photolive/news/697599", title: "Tedxsuzhou2020")
     ),
@@ -176,7 +185,7 @@ let defaultActivities: [ActivityItem] = [
         id: "school_115",
         title: "115校庆",
         subtitle: "",
-        group: .activity,
+        group: "活动",
         iconKey: "cloud",
         target: .webView(url: "https://muuky2nnda.zhaopianzhibo.com/v1/photolive/news/229601", title: "115校庆")
     ),
@@ -184,7 +193,7 @@ let defaultActivities: [ActivityItem] = [
         id: "olympic_2021",
         title: "2021奥体运动会",
         subtitle: "",
-        group: .activity,
+        group: "活动",
         iconKey: "cloud",
         target: .webView(url: "https://m.inmuu.com/v1/photolive/news/1322531", title: "2021奥体运动会")
     ),
@@ -193,7 +202,7 @@ let defaultActivities: [ActivityItem] = [
         id: "webdrive",
         title: "树莓网盘",
         subtitle: "存储（好像坏了）",
-        group: .resource,
+        group: "资源",
         iconKey: "cloud",
         target: .webView(url: "https://webdrive.szzxshumei.com/", title: "树莓网盘")
     ),
@@ -201,7 +210,7 @@ let defaultActivities: [ActivityItem] = [
         id: "tech_lib",
         title: "树莓技术库",
         subtitle: "树莓社技术文档与资源库",
-        group: .resource,
+        group: "资源",
         iconKey: "book",
         target: .webView(url: "https://docs.szzxshumei.com/", title: "树莓技术库")
     ),
@@ -209,7 +218,7 @@ let defaultActivities: [ActivityItem] = [
         id: "aiccrop",
         title: "aiccrop",
         subtitle: "",
-        group: .resource,
+        group: "资源",
         iconKey: "cloud",
         target: .webView(url: "https://auth.aiccrop.com/", title: "aiccrop")
     ),
@@ -217,7 +226,7 @@ let defaultActivities: [ActivityItem] = [
         id: "szzx1000",
         title: "苏州中学官网",
         subtitle: "",
-        group: .resource,
+        group: "资源",
         iconKey: "cloud",
         target: .webView(url: "https://www.szzx1000.cn/", title: "苏州中学官网")
     ),
@@ -226,7 +235,7 @@ let defaultActivities: [ActivityItem] = [
         id: "website",
         title: "社团官网",
         subtitle: "szzxshumei.com",
-        group: .media,
+        group: "媒体",
         iconKey: "home",
         target: .webView(url: "https://szzxshumei.com", title: "社团官网")
     ),
@@ -234,7 +243,7 @@ let defaultActivities: [ActivityItem] = [
         id: "bili",
         title: "树莓B站",
         subtitle: "欢迎关注收看更多视频",
-        group: .media,
+        group: "媒体",
         iconKey: "play",
         target: .webView(url: "https://space.bilibili.com/275501702", title: "视频")
     ),
@@ -242,7 +251,7 @@ let defaultActivities: [ActivityItem] = [
         id: "raspjam",
         title: "树莓酱官网",
         subtitle: "关注树莓酱",
-        group: .media,
+        group: "媒体",
         iconKey: "cloud",
         target: .webView(url: "https://raspjam.com/", title: "树莓酱官网")
     ),
@@ -250,7 +259,7 @@ let defaultActivities: [ActivityItem] = [
         id: "xhs",
         title: "树莓酱酱酱",
         subtitle: "小红书",
-        group: .media,
+        group: "媒体",
         iconKey: "cloud",
         target: .webView(url: "https://xhslink.cn/m/5jNVMA3I7AG", title: "树莓酱酱酱")
     ),
@@ -258,8 +267,8 @@ let defaultActivities: [ActivityItem] = [
         id: "douyin",
         title: "苏中学生传媒",
         subtitle: "抖音",
-        group: .media,
-        iconKey: "apps",
+        group: "媒体",
+        iconKey: "film",
         target: .webView(url: "https://v.douyin.com/K4-bCE1NmTA/", title: "苏中学生传媒")
     )
 ]

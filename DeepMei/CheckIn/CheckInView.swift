@@ -110,7 +110,6 @@ struct CheckInView: View {
             LoginPromptView()
                 .navigationTitle("活动签到")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar(.hidden, for: .tabBar)
         }
     }
 
@@ -183,7 +182,6 @@ struct CheckInView: View {
         }
         .navigationTitle("活动签到")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
         .fullScreenCover(isPresented: $scanning, onDismiss: nil) {
             QRScannerView(
                 onCodeDetected: { code in

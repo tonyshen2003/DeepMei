@@ -111,8 +111,6 @@ struct HallOfFameView: View {
                 filterMenu
             }
         }
-        // 二级功能页：进入名人堂时隐藏底部 TabBar，聚焦列表内容
-        .toolbar(.hidden, for: .tabBar)
         // 系统原生搜索框，常驻显示；大标题由下方修饰器保留
         .searchable(
             text: $searchText,
@@ -603,6 +601,7 @@ let allMembers: [HallOfFameMember] = [
     HallOfFameMember(id: "zhouyijia", name: "周熠嘉", term: 6, role: "第六任社长 / 社盟成员", tags: ["数字化转型","树莓派联盟"], contribution: "树莓派社团联盟主要创始人。推动社团治理数字化转型，提出\"回归社团本质、重视兴趣导向\"。创立《树莓日签》，推进 AIGC 研究。", quote: "现阶段的活动理念与社员实际期望的冲突，需要通过回归兴趣结社的社团本质来解决。", grades: ["A","C","A","A","A","B"], archive: "", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/zhouyijia.webp"),
     HallOfFameMember(id: "zhangyujiang", name: "张宇江", term: 6, role: "副社长 / 后期部部长", tags: ["后期部","AIGC 探索"], contribution: "担任后期部负责人。在第六届社团管理中曾代行社长职权，为社团过渡期的稳定运作提供技术与管理保障。", quote: "", grades: ["B","B","C","B","A","A"], archive: "", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/zhangyujiang.webp"),
     HallOfFameMember(id: "wangyanran", name: "王嫣然", term: 6, role: "副社长 / 代理社长", tags: ["画纸共创","创作者权益"], contribution: "开创树莓社 QQ 宣发阵地，主导\"共享相册\"活动。在社团联盟成立仪式上发表《保障创作者权益倡议》。执笔第六届年度工作报告。", quote: "当我们的感受跃然纸上，记忆便成为了作品。", grades: ["B","A","A","B","A","∞"], archive: "树莓社 2024 年国旗下讲话", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/wangyanran.webp"),
+    HallOfFameMember(id: "xuchuhan", name: "许楚晗", term: 6, role: "副社长 / 表播部部长 / 摄影部部长", tags: ["传媒中心","树莓皇","开创树莓小红书"], contribution: "第六届主管摄影部与表播部两大部门，第七届副社长。指导树莓社国旗下演讲，担任《问道山下》广播节目主持人，领导建设社团小红书账号，在梦之队二十周年舞蹈专场等大型活动中承担摄制和主持工作。", quote: "小皇帝权树莓酱授。", grades: ["B","B","A","B","A","A"], archive: "", photo: "https://szzxshumei.oss-cn-hangzhou.aliyuncs.com/photo/leader/xuchuhan.webp"),
     
     // 第七届
     HallOfFameMember(id: "yangziyan",

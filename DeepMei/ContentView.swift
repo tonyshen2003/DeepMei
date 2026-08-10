@@ -91,9 +91,9 @@ struct HomeNavigationView: View {
                             .frame(width: 150,height: 150) // 设置你需要的尺寸
                             .id(emojiIndex)
                             .transition(.asymmetric(
-                                    insertion: .opacity,
-                                                            removal: .identity
-                                                        ))
+                                insertion: .opacity,
+                                removal: .identity
+                            ))
                         Text("一个关注新时代数字媒体的社团")
                             .font(.headline)
                         Text("以影视创作为核心的艺术创作交流平台")
@@ -209,7 +209,7 @@ struct HomeNavigationView: View {
                 }
             }
             .onAppear {
-                withAnimation(.easeIn(duration: 1.0)) {
+                withAnimation(.easeIn(duration: 0.6)) {
                     emojiIndex = Int.random(in: 1...49)
                 }
             }

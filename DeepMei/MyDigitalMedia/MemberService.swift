@@ -358,7 +358,9 @@ actor MemberService {
 
     // MARK: - 专门下载带签名的 tmp_url（不需要携带 Authorization 头）
     func downloadTempMedia(from urlString: String) async throws -> UIImage? {
-        guard let url = URL(string: urlString) else { return nil }
+        guard let url = URL(string: urlString),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else { return nil }
 
         print("开始下载 tmp_url：\(urlString)")
 

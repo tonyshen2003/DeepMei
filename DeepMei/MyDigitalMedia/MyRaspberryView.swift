@@ -71,8 +71,12 @@ struct RaspberryMember: Identifiable, Equatable, Decodable {
 
     /// 头像：优先「头像」字段第一张，缺失时回退到个人照片第一张（与 Android 对齐）。
     var avatarURL: String? {
-        avatarURLs.first(where: { !$0.isEmpty })
-            ?? photoURLs.first(where: { !$0.isEmpty })
+        func isValid(_ s: String) -> Bool {
+            guard let url = URL(string: s), let scheme = url.scheme?.lowercased() else { return false }
+            return scheme == "http" || scheme == "https"
+        }
+        return avatarURLs.first(where: isValid)
+            ?? photoURLs.first(where: isValid)
     }
     
     // 💡 格式化输出：提取入社年份 (如 "2018")

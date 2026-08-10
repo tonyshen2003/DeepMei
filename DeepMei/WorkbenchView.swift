@@ -9,8 +9,8 @@
 //
 //  页面采用「常用置顶 + 按业务分组」的图标网格（飞书工作台范式）：
 //  - common 为 true 的入口进入顶部「常用」区，以高强调背景呈现；
-//  - 其余入口按 ServiceGroup 分区展示；
-//  - 图标容器用圆角方形 + 品牌语义色（活动=red / 资源=blue / 媒体=green）。
+//  - 其余入口按分组配置分区展示（分组来自飞书「工作台分组配置」表，失败时用内置默认）；
+//  - 分组决定图标容器颜色与默认图标；入口可单独覆盖图标，颜色始终跟随分组。
 //
 
 import SwiftUI
@@ -20,6 +20,7 @@ import UIKit
 
 struct WorkbenchView: View {
     @State private var activities: [ActivityItem]? = nil
+    @State private var groups: [WorkbenchGroup] = defaultGroups
     @State private var isLoading = true
 
     var body: some View {
@@ -39,13 +40,14 @@ struct WorkbenchView: View {
                         description: Text("请在飞书多维表格中添加入口")
                     )
                 } else if let activities {
-                    WorkbenchGrid(activities: activities)
+                    WorkbenchGrid(activities: activities, groups: groups)
                 }
             }
             .navigationTitle("工作台")
             .navigationBarTitleDisplayMode(.large)
         }
         .task {
+            groups = await WorkbenchService.shared.fetchGroups()
             if let remote = await WorkbenchService.shared.fetchActivities() {
                 activities = remote
             } else {
@@ -60,16 +62,33 @@ struct WorkbenchView: View {
 
 private struct WorkbenchGrid: View {
     let activities: [ActivityItem]
+    let groups: [WorkbenchGroup]
 
     private var commonItems: [ActivityItem] {
         activities.filter { $0.common }
     }
 
-    private var grouped: [(ServiceGroup, [ActivityItem])] {
-        serviceGroupOrder.compactMap { group in
-            let items = activities.filter { !$0.common && $0.group == group }
-            return items.isEmpty ? nil : (group, items)
+    /// 按配置表顺序分组；配置表中未出现的分组排到最后。
+    private var grouped: [(WorkbenchGroup, [ActivityItem])] {
+        var result: [(WorkbenchGroup, [ActivityItem])] = []
+        var remaining = activities.filter { !$0.common }
+
+        for group in groups {
+            let items = remaining.filter { $0.group == group.name }
+            if !items.isEmpty {
+                result.append((group, items))
+                remaining.removeAll { $0.group == group.name }
+            }
         }
+
+        let unknownNames = Array(Set(remaining.map(\.group))).sorted()
+        for name in unknownNames {
+            let items = remaining.filter { $0.group == name }
+            let fallbackGroup = WorkbenchGroup(name: name, iconKey: "", colorKey: "", sort: groups.count + 1)
+            result.append((fallbackGroup, items))
+        }
+
+        return result
     }
 
     private let columns = [
@@ -83,7 +102,7 @@ private struct WorkbenchGrid: View {
                 if !commonItems.isEmpty {
                     Section {
                         ForEach(commonItems) { item in
-                            EntryCard(item: item, common: true)
+                            EntryCard(item: item, common: true, groups: groups)
                         }
                     } header: {
                         SectionHeaderView("常用")
@@ -93,10 +112,10 @@ private struct WorkbenchGrid: View {
                 ForEach(grouped, id: \.0) { group, items in
                     Section {
                         ForEach(items) { item in
-                            EntryCard(item: item, common: false)
+                            EntryCard(item: item, common: false, groups: groups)
                         }
                     } header: {
-                        SectionHeaderView(group.rawValue)
+                        SectionHeaderView(group.name)
                     }
                 }
             }
@@ -130,31 +149,51 @@ private struct SectionHeaderView: View {
 private struct EntryCard: View {
     let item: ActivityItem
     let common: Bool
+    let groups: [WorkbenchGroup]
+
+    private var group: WorkbenchGroup? {
+        groups.first { $0.name == item.group }
+    }
 
     var body: some View {
         switch item.target {
         case .webView(let url, let title, let hideTopBar, let fullscreenLandscape):
-            NavigationLink {
-                ImmersiveWebView(
-                    url: URL(string: url.contains("?") ? "\(url)&t=\(Date().timeIntervalSince1970)" : "\(url)?t=\(Date().timeIntervalSince1970)")!,
-                    title: title,
-                    hideTopBar: hideTopBar,
-                    fullscreenLandscape: fullscreenLandscape
-                )
-            } label: {
-                CardContent(item: item, common: common)
+            if let resolvedURL = Self.resolvedWebURL(url) {
+                NavigationLink {
+                    ImmersiveWebView(
+                        url: resolvedURL,
+                        title: title,
+                        hideTopBar: hideTopBar,
+                        fullscreenLandscape: fullscreenLandscape
+                    )
+                } label: {
+                    CardContent(item: item, common: common, group: group)
+                }
+                .buttonStyle(.plain)
+            } else {
+                CardContent(item: item, common: common, group: group)
             }
-            .buttonStyle(.plain)
 
         case .markdown(let fileName, _):
             NavigationLink {
                 MarkdownArticleView(fileName: fileName)
-                    .toolbar(.hidden, for: .tabBar)
             } label: {
-                CardContent(item: item, common: common)
+                CardContent(item: item, common: common, group: group)
             }
             .buttonStyle(.plain)
         }
+    }
+
+    /// 拼接防缓存时间戳，并校验必须是 http/https 链接。
+    /// 脏数据（换行符、相对路径、带空格 URL）不会进入 WebView，也不会触发强制解包崩溃。
+    private static func resolvedWebURL(_ raw: String) -> URL? {
+        let urlString = raw.contains("?")
+            ? "\(raw)&t=\(Int(Date().timeIntervalSince1970))"
+            : "\(raw)?t=\(Int(Date().timeIntervalSince1970))"
+        guard let url = URL(string: urlString),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else { return nil }
+        return url
     }
 }
 
@@ -257,25 +296,34 @@ private struct FullscreenLandscapeModifier: ViewModifier {
 private struct CardContent: View {
     let item: ActivityItem
     let common: Bool
+    let group: WorkbenchGroup?
 
-    /// 分组 → 品牌语义色映射。
+    /// 分组颜色 key → 系统色映射（白名单，保证对比度与深色模式适配）。
     private var groupColor: Color {
-        switch item.group {
-        case .activity: return .red
-        case .resource: return .blue
-        case .media:    return .green
+        switch group?.colorKey {
+        case "raspberry":  return Color(red: 148 / 255, green: 43 / 255, blue: 56 / 255) // 品牌树莓红 #942B38
+        case "blue":       return .blue
+        case "green":      return Color(red: 0.12, green: 0.56, blue: 0.25) // 加深绿，保证白图标对比度
+        case "darkorange": return Color(red: 195 / 255, green: 74 / 255, blue: 0) // 加深橙 #C34A00
+        case "purple":     return .purple
+        default:           return .gray
         }
     }
 
-    /// 图标 → SF Symbol 映射。
+    /// 图标 key → SF Symbol 映射；入口未填图标时使用分组默认图标。
     private var iconName: String {
-        switch item.iconKey {
-        case "event": return "calendar"
-        case "home":  return "house.fill"
-        case "cloud": return "cloud.fill"
-        case "book":  return "book.fill"
-        case "play":  return "play.circle.fill"
-        default:      return "square.grid.2x2.fill"
+        let key = item.iconKey.isEmpty ? (group?.iconKey ?? "") : item.iconKey
+        switch key {
+        case "event":         return "calendar"
+        case "home":          return "house.fill"
+        case "cloud":         return "cloud.fill"
+        case "book":          return "book.fill"
+        case "play":          return "play.circle.fill"
+        case "gamecontroller": return "gamecontroller.fill"
+        case "film":          return "film.fill"
+        case "folder":        return "folder.fill"
+        case "link":          return "link"
+        default:              return "square.grid.2x2.fill"
         }
     }
 

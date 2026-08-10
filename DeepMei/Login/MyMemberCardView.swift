@@ -51,7 +51,6 @@ struct MyMemberCardView: View {
         }
         .navigationTitle("我的社员卡")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
     }
 
     private var content: some View {

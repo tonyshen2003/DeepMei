@@ -155,8 +155,10 @@ CheckInService.lookupMember             ← Worker：nfc.raspjam.com
 ### 6.3 工程配置
 
 - Xcode → Signing & Capabilities → 添加 **Near Field Communication Tag Reading**：
-  - 方案 A：entitlement `com.apple.developer.nfc.readersession.formats = [NDEF]`；
-  - 方案 B：追加 `ISO14443`（或按需声明 ISO 7816 AID）；
+  - 本方案（只读 UID）：entitlement `com.apple.developer.nfc.readersession.formats = [TAG]`；
+  - 注意：旧资料里的 `NDEF` 值已被 App Store Connect 校验弃用，
+    上传会报 `NDEF is disallowed`（ITMS-90778），读原生标签一律用 `TAG`；
+  - 若后续要读 ISO 7816 Applet，再按需声明 AID；
 - Info.plist 增加：
   ```xml
   <key>NFCReaderUsageDescription</key>

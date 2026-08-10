@@ -5,38 +5,47 @@
 //  工作台数据获取层 —— 从飞书 Bitable 拉取工作台入口列表。
 //
 //  Swift 6 并发说明：
-//  - 所有 DTO 类型收进 WorkbenchDTO 枚举命名空间，避免被 Swift 6 推断为 @MainActor；
+//  - 纯数据 DTO 收进 WorkbenchDTO 枚举命名空间并标记 nonisolated，
+//    避免被默认 MainActor 隔离（否则在 actor 内解码会告警/报错）；
 //  - FieldMap 替代 Dictionary extension，消除跨隔离域方法调用；
-//  - groupOrder 在 actor 内部自维护，不引用全局 serviceGroupOrder。
+//  - 分组顺序取自飞书「工作台分组配置」表，配置不可用时回退到 defaultGroups。
 //
 //  飞书多维表格字段约定（用户自行建表）：
 //  | 字段名     | 类型     | 说明                                              |
 //  |-----------|----------|---------------------------------------------------|
 //  | 入口标题   | 文本     | 卡片标题                                           |
 //  | 副标题     | 文本     | 一句话简介（可留空）                                 |
-//  | 分组       | 单选     | 活动 / 资源 / 媒体                                  |
+//  | 分组       | 单选     | 分组名称，需与「工作台分组配置」表的选项一致          |
 //  | 常用       | 复选框   | 勾选后置顶「常用」区                                 |
 //  | 跳转类型   | 单选     | 网页 / 文章                                        |
 //  | 链接URL    | 文本     | 跳转类型含「网页」时填                               |
 //  | 文件名     | 文本     | 跳转类型含「文章」时填                               |
-//  | 图标       | 单选     | event / home / cloud / book / play / apps          |
+//  | 图标       | 单选     | event/home/cloud/book/play/gamecontroller/film/folder/link（留空用分组默认）|
 //  | 排序       | 数字     | 同组内升序排列（可留空，默认 0）                     |
 //  | 隐藏顶部栏 | 复选框   | 勾选后进入网页时隐藏应用顶部栏（适合全屏网页）         |
 //  | 全屏横屏   | 复选框   | 勾选后强制横屏并隐藏系统栏、保持屏幕常亮（适合云游戏） |
+//
+//  分组配置表（「工作台分组配置」，同一多维表格内）：
+//  | 字段名     | 类型  | 说明                                            |
+//  |-----------|-------|-------------------------------------------------|
+//  | 分组名称   | 文本  | 与入口表「分组」选项一致，作为唯一关联键          |
+//  | 图标       | 单选  | 分组默认图标 key（同入口表白名单）               |
+//  | 颜色       | 单选  | raspberry / blue / green / purple / darkorange             |
+//  | 排序       | 数字  | 页面分区展示顺序，升序                            |
 //
 
 import Foundation
 
 // MARK: - 数据传输对象（非 actor 作用域，避免 @MainActor 推断）
 
-private enum WorkbenchDTO {
+private nonisolated enum WorkbenchDTO {
 
-    struct RecordListResponse: Decodable {
+    nonisolated struct RecordListResponse: Decodable {
         let code: Int
         let msg: String
         let data: DataPayload?
 
-        struct DataPayload: Decodable {
+        nonisolated struct DataPayload: Decodable {
             let items: [Record]?
             let pageToken: String?
             let hasMore: Bool?
@@ -49,7 +58,7 @@ private enum WorkbenchDTO {
         }
     }
 
-    struct Record: Decodable {
+    nonisolated struct Record: Decodable {
         let recordId: String
         let fields: FieldMap
 
@@ -61,7 +70,7 @@ private enum WorkbenchDTO {
 
     /// 字段映射容器 —— 替代 Dictionary extension，所有提取方法集中于此，
     /// 避免 Swift 6 将 Dictionary 扩展方法推断为 @MainActor。
-    struct FieldMap: Decodable {
+    nonisolated struct FieldMap: Decodable {
         private let raw: [String: FieldValue]
 
         init(from decoder: Decoder) throws {
@@ -94,7 +103,7 @@ private enum WorkbenchDTO {
     }
 
     /// 飞书字段值解码（工作台专用，轻量版）。
-    enum FieldValue: Decodable {
+    nonisolated enum FieldValue: Decodable {
         case string(String)
         case number(Double)
         case bool(Bool)
@@ -137,16 +146,30 @@ actor WorkbenchService {
     // ★★★ 飞书 Bitable 配置 —— 与 Android 版共用同一张表 ★★★
     private let appToken = "Ewq5btu9LaIUdLsZe2ecRWqWntc"
     private let tableId = "tblJT0oKin9rxdJQ"
+    /// 分组配置表名（表不存在或为空时使用内置默认分组）
+    private let configTableName = "工作台分组配置"
 
     private let baseURL = URL(string: "https://open.feishu.cn")!
 
-    /// 分组展示顺序 —— actor 内部自维护，不引用全局 serviceGroupOrder
-    private let groupOrder: [ServiceGroup] = [.activity, .resource, .media]
-
     /// 内存缓存：本次启动内只请求一次飞书
     private var cachedActivities: [ActivityItem]?
+    private var cachedGroups: [WorkbenchGroup]?
 
     // MARK: - 公开接口
+
+    /// 拉取分组配置；失败或配置表为空时返回内置默认分组。
+    func fetchGroups() async -> [WorkbenchGroup] {
+        if let cached = cachedGroups { return cached }
+
+        guard let token = try? await MemberService.shared.getTenantAccessToken() else {
+            return defaultGroups
+        }
+
+        let groups = (try? await fetchGroupRecords(token: token)) ?? []
+        let result = groups.isEmpty ? defaultGroups : groups
+        cachedGroups = result
+        return result
+    }
 
     /// 拉取工作台入口列表。
     func fetchActivities() async -> [ActivityItem]? {
@@ -190,7 +213,8 @@ actor WorkbenchService {
 
             guard !allRecords.isEmpty else { return nil }
 
-            let items = mapRecords(allRecords)
+            let groups = await fetchGroups()
+            let items = mapRecords(allRecords, groupOrder: groups.map(\.name))
             guard !items.isEmpty else { return nil }
 
             cachedActivities = items
@@ -202,17 +226,17 @@ actor WorkbenchService {
 
     func clearCache() {
         cachedActivities = nil
+        cachedGroups = nil
     }
 
     // MARK: - 记录映射
 
-    private func mapRecords(_ records: [WorkbenchDTO.Record]) -> [ActivityItem] {
-        let order = groupOrder  // 本地捕获，避免闭包内跨域引用
+    private func mapRecords(_ records: [WorkbenchDTO.Record], groupOrder: [String]) -> [ActivityItem] {
         return records
             .compactMap { mapSingle($0) }
             .sorted { a, b in
-                let idxA = order.firstIndex(of: a.item.group) ?? 0
-                let idxB = order.firstIndex(of: b.item.group) ?? 0
+                let idxA = groupOrder.firstIndex(of: a.item.group) ?? groupOrder.count
+                let idxB = groupOrder.firstIndex(of: b.item.group) ?? groupOrder.count
                 if idxA != idxB { return idxA < idxB }
                 return a.sortValue < b.sortValue
             }
@@ -226,15 +250,9 @@ actor WorkbenchService {
         guard !title.isEmpty else { return nil }
 
         let subtitle = fields.text("副标题")
-        let group: ServiceGroup = {
-            switch fields.text("分组") {
-            case "资源": return .resource
-            case "媒体": return .media
-            default:     return .activity
-            }
-        }()
+        let groupName = fields.text("分组").isEmpty ? "其他" : fields.text("分组")
         let common = fields.bool("常用")
-        let iconKey = fields.text("图标").isEmpty ? "apps" : fields.text("图标")
+        let iconKey = fields.text("图标")
         let sortValue = fields.int("排序")
         let hideTopBar = fields.bool("隐藏顶部栏")
         let fullscreenLandscape = fields.bool("全屏横屏")
@@ -275,7 +293,7 @@ actor WorkbenchService {
                 id: record.recordId.isEmpty ? title : record.recordId,
                 title: title,
                 subtitle: subtitle,
-                group: group,
+                group: groupName,
                 common: common,
                 iconKey: iconKey,
                 target: target
@@ -287,5 +305,87 @@ actor WorkbenchService {
     private struct SortableItem {
         let item: ActivityItem
         let sortValue: Int
+    }
+
+    // MARK: - 分组配置拉取
+
+    private func fetchGroupRecords(token: String) async throws -> [WorkbenchGroup] {
+        guard let configTableId = try await findConfigTableID(token: token) else { return [] }
+
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent(
+                "/open-apis/bitable/v1/apps/\(appToken)/tables/\(configTableId)/records"
+            ),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [URLQueryItem(name: "page_size", value: "100")]
+
+        var req = URLRequest(url: components.url!)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return [] }
+
+        let decoded = try JSONDecoder().decode(WorkbenchDTO.RecordListResponse.self, from: data)
+        guard decoded.code == 0, let items = decoded.data?.items else { return [] }
+
+        return items
+            .compactMap(mapGroup)
+            .sorted { a, b in
+                if a.sort != b.sort { return a.sort < b.sort }
+                return a.name < b.name
+            }
+    }
+
+    /// 在多维表格中按表名查找分组配置表。
+    private func findConfigTableID(token: String) async throws -> String? {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("/open-apis/bitable/v1/apps/\(appToken)/tables"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [URLQueryItem(name: "page_size", value: "100")]
+
+        var req = URLRequest(url: components.url!)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+
+        struct TablesResponse: Decodable {
+            let code: Int
+            let data: DataPayload?
+
+            struct DataPayload: Decodable {
+                let items: [Table]?
+            }
+
+            struct Table: Decodable {
+                let tableId: String
+                let name: String
+
+                enum CodingKeys: String, CodingKey {
+                    case tableId = "table_id"
+                    case name
+                }
+            }
+        }
+
+        let decoded = try JSONDecoder().decode(TablesResponse.self, from: data)
+        guard decoded.code == 0, let items = decoded.data?.items else { return nil }
+        return items.first { $0.name == configTableName }?.tableId
+    }
+
+    private func mapGroup(_ record: WorkbenchDTO.Record) -> WorkbenchGroup? {
+        let fields = record.fields
+        let name = fields.text("分组名称")
+        guard !name.isEmpty else { return nil }
+
+        return WorkbenchGroup(
+            name: name,
+            iconKey: fields.text("图标"),
+            colorKey: fields.text("颜色"),
+            sort: fields.int("排序")
+        )
     }
 }

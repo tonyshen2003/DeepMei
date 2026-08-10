@@ -36,8 +36,8 @@ struct AboutView: View {
                         .foregroundStyle(.secondary)
 
                     Text("版本 \(versionString)")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
@@ -71,6 +71,22 @@ struct AboutView: View {
                 Text("更新")
             } footer: {
                 Text("新版本通过 TestFlight 分发")
+            }
+
+            // MARK: - 致谢
+            Section {
+                NavigationLink {
+                    CreditsView()
+                } label: {
+                    Label {
+                        Text("创作者名单")
+                    } icon: {
+                        Image(systemName: "person.2.fill")
+                            .foregroundStyle(.pink)
+                    }
+                }
+            } header: {
+                Text("致谢")
             }
 
             // MARK: - 功能入口
@@ -128,11 +144,6 @@ struct AboutView: View {
                 }
             } header: {
                 Text("联系我们")
-            } footer: {
-                Text("苏州中学树莓社")
-                    .frame(maxWidth: .infinity)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 16)
             }
         }
         .navigationTitle("关于")

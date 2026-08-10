@@ -61,6 +61,10 @@ final class ImageCacheManager {
     /// 取图：内存 → 磁盘 → 网络（同 key 并发只下载一次），成功路径会自动回填缓存。
     func image(for urlString: String) async -> UIImage? {
         guard !urlString.isEmpty else { return nil }
+        // 只接受 http/https，脏数据（如换行符、相对路径）直接跳过，避免网络层刷错误日志。
+        guard let url = URL(string: urlString),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else { return nil }
         let key = stableImageCacheKey(urlString)
 
         if let cached = memory.object(forKey: key as NSString) {
