@@ -576,45 +576,53 @@ struct WebView: UIViewRepresentable {
 
 struct WorksBrowserView: View {
     private let categories: [(key: String, name: String)] = [
-        ("all", "全部"),
-        ("original", "原创"),
-        ("events", "活动"),
+        ("all", "全部作品"),
+        ("original", "原创作品"),
+        ("events", "校园活动"),
         ("music", "音乐舞蹈"),
-        ("news", "新闻"),
-        ("digital", "数字")
+        ("news", "校园新闻"),
+        ("digital", "数字创意")
     ]
 
     @State private var selectedCategory = "all"
     @State private var webView: WKWebView?
 
     var body: some View {
-        VStack(spacing: 0) {
-            Picker("作品分类", selection: $selectedCategory) {
-                ForEach(categories, id: \.key) { category in
-                    Text(category.name).tag(category.key)
+        WorksWKWebView(webView: $webView, selectedCategory: $selectedCategory)
+            .ignoresSafeArea(edges: .bottom)
+            .navigationTitle("作品播放")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        ForEach(categories, id: \.key) { category in
+                            Button {
+                                selectedCategory = category.key
+                                let js = "window.ShumeiBridge && window.ShumeiBridge.setCategory('\(category.key)')"
+                                webView?.evaluateJavaScript(js, completionHandler: nil)
+                            } label: {
+                                if selectedCategory == category.key {
+                                    Label(category.name, systemImage: "checkmark")
+                                } else {
+                                    Text(category.name)
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    }
+                    .accessibilityLabel("筛选作品分类")
                 }
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .onChange(of: selectedCategory) { _, newValue in
-                let js = "window.ShumeiBridge && window.ShumeiBridge.setCategory('\(newValue)')"
-                webView?.evaluateJavaScript(js, completionHandler: nil)
-            }
-
-            WorksWKWebView(webView: $webView)
-                .ignoresSafeArea(edges: .bottom)
-        }
-        .navigationTitle("作品播放")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
 private struct WorksWKWebView: UIViewRepresentable {
     @Binding var webView: WKWebView?
+    @Binding var selectedCategory: String
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(webView: $webView)
+        Coordinator(webView: $webView, selectedCategory: $selectedCategory)
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -640,15 +648,18 @@ private struct WorksWKWebView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         @Binding var webView: WKWebView?
+        @Binding var selectedCategory: String
 
-        init(webView: Binding<WKWebView?>) {
+        init(webView: Binding<WKWebView?>, selectedCategory: Binding<String>) {
             _webView = webView
+            _selectedCategory = selectedCategory
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            // 隐藏网页自带的分类 Tab（搜索框保留，仍由网页提供）
+            // 隐藏网页自带的分类 Tab（搜索框保留，仍由网页提供），并应用当前选中的分类
             webView.evaluateJavaScript(
-                "window.ShumeiBridge && window.ShumeiBridge.hideTabs(true)",
+                "window.ShumeiBridge && window.ShumeiBridge.hideTabs(true);" +
+                    "window.ShumeiBridge && window.ShumeiBridge.setCategory('\(selectedCategory)')",
                 completionHandler: nil
             )
         }
