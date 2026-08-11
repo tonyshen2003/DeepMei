@@ -579,6 +579,7 @@ struct WorksBrowserView: View {
         ("all", "全部作品"),
         ("original", "原创作品"),
         ("events", "校园活动"),
+        ("sports", "体育赛事"),
         ("music", "音乐舞蹈"),
         ("news", "校园新闻"),
         ("digital", "数字创意")
