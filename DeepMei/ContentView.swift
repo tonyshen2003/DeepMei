@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 import WebKit
 
 enum MainTab: Hashable {
@@ -587,13 +588,22 @@ struct WorksBrowserView: View {
 
     @State private var selectedCategory = "all"
     @State private var webView: WKWebView?
+    @State private var navigationController: UINavigationController?
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         WorksWKWebView(webView: $webView, selectedCategory: $selectedCategory)
             .ignoresSafeArea(edges: .bottom)
             .navigationTitle("作品播放")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(true)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: handleBack) {
+                        Image(systemName: "chevron.backward")
+                    }
+                    .accessibilityLabel("返回")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         ForEach(categories, id: \.key) { category in
@@ -615,6 +625,52 @@ struct WorksBrowserView: View {
                     .accessibilityLabel("筛选作品分类")
                 }
             }
+            .background(
+                NavControllerAccessor(navigationController: $navigationController)
+            )
+            .onChange(of: navigationController) { _, nav in
+                // 禁用系统的整页弹出返回手势，改用网页历史返回
+                nav?.interactivePopGestureRecognizer?.isEnabled = false
+            }
+            .onDisappear {
+                navigationController?.interactivePopGestureRecognizer?.isEnabled = true
+            }
+    }
+
+    private func handleBack() {
+        guard let webView = webView else {
+            dismiss()
+            return
+        }
+
+        let isDetailJS = "window.ShumeiBridge && window.ShumeiBridge.isDetailOpen ? window.ShumeiBridge.isDetailOpen() : false"
+        webView.evaluateJavaScript(isDetailJS) { result, _ in
+            let isDetail = (result as? NSNumber)?.boolValue ?? false
+            if isDetail {
+                let backJS = "window.ShumeiBridge && window.ShumeiBridge.goBack()"
+                webView.evaluateJavaScript(backJS, completionHandler: nil)
+            } else {
+                dismiss()
+            }
+        }
+    }
+}
+
+private struct NavControllerAccessor: UIViewControllerRepresentable {
+    @Binding var navigationController: UINavigationController?
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        let viewController = UIViewController()
+        DispatchQueue.main.async {
+            navigationController = viewController.navigationController
+        }
+        return viewController
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        DispatchQueue.main.async {
+            navigationController = uiViewController.navigationController
+        }
     }
 }
 
@@ -633,6 +689,8 @@ private struct WorksWKWebView: UIViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
+        // 允许在网页历史里左右滑动返回（详情 ↔ 列表）
+        webView.allowsBackForwardNavigationGestures = true
 
         let url = URL(string: "https://shumeiartworks.coze.site?t=\(Date().timeIntervalSince1970)")!
         webView.load(
