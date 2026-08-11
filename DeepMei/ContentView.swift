@@ -581,7 +581,8 @@ struct WorksBrowserView: View {
         ("original", "原创作品"),
         ("events", "校园活动"),
         ("sports", "体育赛事"),
-        ("music", "音乐舞蹈"),
+        ("music", "歌曲演唱"),
+        ("dance", "舞蹈表演"),
         ("news", "校园新闻"),
         ("digital", "数字创意")
     ]
