@@ -7,6 +7,8 @@
 //
 
 import Foundation
+import UIKit
+import Darwin
 
 struct LoginRecordService {
     static let shared = LoginRecordService()
@@ -15,6 +17,16 @@ struct LoginRecordService {
     private let appToken = "DCLswycxhiwXTaklIAec3CUJnBS"
     private let tableId = "tblyFE3XCBPm5EAE"
     private let session: URLSession
+
+    /// 设备硬件型号标识（如 iPhone15,2）；取不到时回退为通用类型（iPhone / iPad）。
+    private static var deviceModel: String {
+        var size = 0
+        sysctlbyname("hw.machine", nil, &size, nil, 0)
+        guard size > 0 else { return UIDevice.current.model }
+        var machine = [CChar](repeating: 0, count: size)
+        sysctlbyname("hw.machine", &machine, &size, nil, 0)
+        return String(cString: machine)
+    }
 
     init() {
         let configuration = URLSessionConfiguration.default
@@ -47,6 +59,9 @@ struct LoginRecordService {
                     loginTime: Int64(Date().timeIntervalSince1970 * 1000),
                     loginMethod: "App 登录",
                     result: "成功",
+                    deviceSystem: "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)",
+                    deviceModel: Self.deviceModel,
+                    appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "未知",
                     location: location
                 )
             )
@@ -68,6 +83,9 @@ private struct LoginRecordFields: Encodable {
     let loginTime: Int64
     let loginMethod: String
     let result: String
+    let deviceSystem: String
+    let deviceModel: String
+    let appVersion: String
     let location: String?
 
     enum CodingKeys: String, CodingKey {
@@ -76,6 +94,9 @@ private struct LoginRecordFields: Encodable {
         case loginTime = "登录时间"
         case loginMethod = "登录方式"
         case result = "结果"
+        case deviceSystem = "手机系统"
+        case deviceModel = "手机型号"
+        case appVersion = "软件版本"
         case location = "定位"
     }
 }

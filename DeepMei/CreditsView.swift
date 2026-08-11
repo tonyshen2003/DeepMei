@@ -64,7 +64,13 @@ struct CreditsView: View {
     private let testers: [CreditPerson] = [
         CreditPerson(name: "贾奕博", role: "测试", contribution: ""),
         CreditPerson(name: "顾臻煜", role: "测试", contribution: ""),
-        CreditPerson(name: "许楚晗", role: "测试", contribution: "")
+        CreditPerson(name: "许楚晗", role: "测试", contribution: ""),
+        CreditPerson(name: "杨梓言", role: "测试", contribution: ""),
+        CreditPerson(name: "朱奕", role: "测试", contribution: ""),
+        CreditPerson(name: "孙夕涵", role: "测试", contribution: ""),
+        CreditPerson(name: "树莓酱", role: "测试", contribution: ""),
+        CreditPerson(name: "陆未一", role: "测试", contribution: ""),
+        CreditPerson(name: "徐诗莹", role: "测试", contribution: "")
     ]
 
     var body: some View {
