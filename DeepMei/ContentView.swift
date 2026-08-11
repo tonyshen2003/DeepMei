@@ -116,21 +116,7 @@ struct HomeNavigationView: View {
                     }
                     .buttonStyle(.plain)
                     NavigationLink {
-                        WebView(
-                            url:
-                                URL(
-                                    string:
-                                        "https://shumeiartworks.coze.site?t=\(Date().timeIntervalSince1970)"
-                                )!
-                        )
-                        .ignoresSafeArea()
-                        .navigationTitle(
-                            "作品播放"
-                        )
-                        .navigationBarTitleDisplayMode(
-                            .inline
-                        )
-                        .ignoresSafeArea(edges: .bottom)
+                        WorksBrowserView()
                     } label: {
                         ActionCard(
                             title: "作品播放",
@@ -575,6 +561,108 @@ struct WebView: UIViewRepresentable {
             }
 
             // 命中白名单的自定义 scheme：交给系统拉起对应 App，WebView 不再加载
+            if ExternalLinkPolicy.shouldOpenExternally(targetURL) {
+                UIApplication.shared.open(targetURL) { _ in }
+                decisionHandler(.cancel)
+                return
+            }
+
+            decisionHandler(.allow)
+        }
+    }
+}
+
+// MARK: - 作品播放（原生分类筛选）
+
+struct WorksBrowserView: View {
+    private let categories: [(key: String, name: String)] = [
+        ("all", "全部"),
+        ("original", "原创"),
+        ("events", "活动"),
+        ("music", "音乐舞蹈"),
+        ("news", "新闻"),
+        ("digital", "数字")
+    ]
+
+    @State private var selectedCategory = "all"
+    @State private var webView: WKWebView?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("作品分类", selection: $selectedCategory) {
+                ForEach(categories, id: \.key) { category in
+                    Text(category.name).tag(category.key)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .onChange(of: selectedCategory) { _, newValue in
+                let js = "window.ShumeiBridge && window.ShumeiBridge.setCategory('\(newValue)')"
+                webView?.evaluateJavaScript(js, completionHandler: nil)
+            }
+
+            WorksWKWebView(webView: $webView)
+                .ignoresSafeArea(edges: .bottom)
+        }
+        .navigationTitle("作品播放")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct WorksWKWebView: UIViewRepresentable {
+    @Binding var webView: WKWebView?
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(webView: $webView)
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .default()
+        config.allowsInlineMediaPlayback = true
+
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
+
+        let url = URL(string: "https://shumeiartworks.coze.site?t=\(Date().timeIntervalSince1970)")!
+        webView.load(
+            URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 30)
+        )
+
+        DispatchQueue.main.async {
+            self.webView = webView
+        }
+        return webView
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        @Binding var webView: WKWebView?
+
+        init(webView: Binding<WKWebView?>) {
+            _webView = webView
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            // 隐藏网页自带的分类 Tab（搜索框保留，仍由网页提供）
+            webView.evaluateJavaScript(
+                "window.ShumeiBridge && window.ShumeiBridge.hideTabs(true)",
+                completionHandler: nil
+            )
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            guard let targetURL = navigationAction.request.url else {
+                decisionHandler(.allow)
+                return
+            }
+
             if ExternalLinkPolicy.shouldOpenExternally(targetURL) {
                 UIApplication.shared.open(targetURL) { _ in }
                 decisionHandler(.cancel)
