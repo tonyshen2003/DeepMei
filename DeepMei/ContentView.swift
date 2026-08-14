@@ -599,12 +599,16 @@ struct WorksBrowserView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        WorksWKWebView(
-            webView: $webView,
-            selectedCategory: $selectedCategory,
-            currentURL: $currentURL
-        )
-            .ignoresSafeArea(edges: .bottom)
+        Group {
+            if #available(iOS 26.0, *) {
+                // iOS 26 液态玻璃：内容延伸到半透明底栏下方，玻璃模糊才能显现
+                worksWebView
+                    .ignoresSafeArea(edges: .bottom)
+            } else {
+                // iOS 18 及更早：底栏不透明，内容停在其上方，不强行延伸
+                worksWebView
+            }
+        }
             .navigationTitle("作品播放")
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
@@ -651,6 +655,14 @@ struct WorksBrowserView: View {
             .onDisappear {
                 navigationController?.interactivePopGestureRecognizer?.isEnabled = true
             }
+    }
+
+    private var worksWebView: some View {
+        WorksWKWebView(
+            webView: $webView,
+            selectedCategory: $selectedCategory,
+            currentURL: $currentURL
+        )
     }
 
     private func handleBack() {
@@ -749,7 +761,10 @@ private struct WorksWKWebView: UIViewRepresentable {
         /// 观察 WebView 的 URL 变化（网页内部跳转也能拿到最新链接）。
         func observeURL(of webView: WKWebView) {
             urlObserver = webView.observe(\.url, options: [.new]) { [weak self] observedWebView, _ in
-                self?.currentURL = observedWebView.url
+                // 延后到下一 runloop 再写绑定，避免在视图更新期间修改状态
+                DispatchQueue.main.async {
+                    self?.currentURL = observedWebView.url
+                }
             }
         }
 
