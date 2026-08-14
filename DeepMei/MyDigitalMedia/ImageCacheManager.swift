@@ -95,6 +95,13 @@ final class ImageCacheManager {
         return image
     }
 
+    /// 同步读取内存缓存中的图片（用于分享卡等需要立即渲染、等不了异步加载的场景）。
+    func cachedImage(for urlString: String) -> UIImage? {
+        guard !urlString.isEmpty else { return nil }
+        let key = stableImageCacheKey(urlString)
+        return memory.object(forKey: key as NSString)
+    }
+
     // MARK: - 磁盘缓存
 
     private func diskURL(forKey key: String) -> URL {

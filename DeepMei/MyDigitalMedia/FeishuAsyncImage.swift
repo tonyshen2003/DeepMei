@@ -21,13 +21,13 @@ struct FeishuAsyncImage: View {
     var body: some View {
         Group {
             if let uiImage = image {
-                // 加载成功：Color.clear 承接提案尺寸，图片 scaledToFill 覆盖绘制，
-                // 外层 clipped 把超出 layout bounds 的部分裁掉，杜绝溢出遮挡。
+                // 加载成功：Color.clear 承接提案尺寸，按调用方要求的 contentMode 绘制
+                //（fill 时外层 clipped 裁掉超出部分；fit 时完整显示，不裁切）。
                 Color.clear
                     .overlay {
                         Image(uiImage: uiImage)
                             .resizable()
-                            .scaledToFill()
+                            .aspectRatio(contentMode: contentMode)
                     }
                     .clipped()
             } else if isLoading {
