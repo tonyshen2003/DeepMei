@@ -20,19 +20,49 @@ struct HallOfFameMember: Identifiable, Hashable {
     let archive: String
     let photo: String
     
-    // 届别主题色 (符合 iOS HIG 语义调色)
+    // 届别主题色：浅色/深色各一套动态色，保证文字 4.5:1、图形 3:1 对比度
     static func color(for term: Int) -> Color {
+        let light: (Double, Double, Double)
+        let dark: (Double, Double, Double)
         switch term {
-        case 1: return Color(red: 0.58, green: 0.17, blue: 0.22)
-        case 2: return Color(red: 0.67, green: 0.37, blue: 0.19)
-        case 3: return Color(red: 0.61, green: 0.51, blue: 0.28)
-        case 4: return Color(red: 0.26, green: 0.47, blue: 0.36)
-        case 5: return Color(red: 0.27, green: 0.37, blue: 0.55)
-        case 6: return Color(red: 0.40, green: 0.30, blue: 0.52)
-        case 7: return Color(red: 0.54, green: 0.30, blue: 0.44)
-        case 8: return Color(red: 0.22, green: 0.51, blue: 0.47)
-        default: return .accentColor
+        case 1:
+            light = (0.58, 0.17, 0.22)
+            dark = (0.80, 0.43, 0.48)
+        case 2:
+            light = (0.62, 0.32, 0.15)
+            dark = (0.78, 0.50, 0.26)
+        case 3:
+            light = (0.52, 0.42, 0.19)
+            dark = (0.68, 0.56, 0.31)
+        case 4:
+            light = (0.26, 0.47, 0.36)
+            dark = (0.42, 0.62, 0.50)
+        case 5:
+            light = (0.27, 0.37, 0.55)
+            dark = (0.45, 0.55, 0.75)
+        case 6:
+            light = (0.40, 0.30, 0.52)
+            dark = (0.62, 0.50, 0.74)
+        case 7:
+            light = (0.54, 0.30, 0.44)
+            dark = (0.68, 0.47, 0.58)
+        case 8:
+            light = (0.20, 0.47, 0.43)
+            dark = (0.36, 0.62, 0.58)
+        default:
+            return .accentColor
         }
+        return Color(uiColor: UIColor { traits in
+            let values = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: values.0, green: values.1, blue: values.2, alpha: 1)
+        })
+    }
+
+    /// 届数角标文字色：浅色模式深底配白字，深色模式亮底配黑字，小字保持 4.5:1。
+    static func badgeTextColor(for term: Int) -> Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? .black : .white
+        })
     }
 
     var termColor: Color {
@@ -218,7 +248,7 @@ struct MemberCard: View {
             // 3. 右上角届数角标（恢复每届主题色）
             Text("第\(chineseTerm(member.term))届")
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(HallOfFameMember.badgeTextColor(for: member.term))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(

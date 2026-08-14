@@ -301,10 +301,10 @@ private struct CardContent: View {
     /// 分组颜色 key → 系统色映射（白名单，保证对比度与深色模式适配）。
     private var groupColor: Color {
         switch group?.colorKey {
-        case "raspberry":  return Color(red: 148 / 255, green: 43 / 255, blue: 56 / 255) // 品牌树莓红 #942B38
+        case "raspberry", "red": return Color(red: 148 / 255, green: 43 / 255, blue: 56 / 255) // 品牌树莓红 #942B38
         case "blue":       return .blue
         case "green":      return Color(red: 0.12, green: 0.56, blue: 0.25) // 加深绿，保证白图标对比度
-        case "darkorange": return Color(red: 195 / 255, green: 74 / 255, blue: 0) // 加深橙 #C34A00
+        case "darkorange", "orange": return Color(red: 195 / 255, green: 74 / 255, blue: 0) // 加深橙 #C34A00
         case "purple":     return .purple
         default:           return .gray
         }

@@ -220,8 +220,12 @@ private struct StampBadge: View {
     }
 
     private var sealColor: Color {
-        // 印泥绯红，与 Android StampBadge 的 #D32F2F 完全一致
-        Color(red: 211 / 255.0, green: 47 / 255.0, blue: 47 / 255.0)
+        // 印泥绯红：浅色沿用 Android 同款 #C62828，深色自动提亮，保证文字 4.5:1
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.84, green: 0.39, blue: 0.40, alpha: 1)
+                : UIColor(red: 198 / 255.0, green: 40 / 255.0, blue: 40 / 255.0, alpha: 1)
+        })
     }
 
     var body: some View {
