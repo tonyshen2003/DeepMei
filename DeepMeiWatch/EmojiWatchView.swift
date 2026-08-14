@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 import WatchKit
 
 struct EmojiWatchView: View {
@@ -22,17 +23,19 @@ struct EmojiWatchView: View {
             ZStack {
                 Color.black
 
-                Image("\(emojiIndex)")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(
-                        width: proxy.size.width,
-                        height: proxy.size.height,
-                        alignment: .center
-                    )
-                    .offset(y: verticalAdjustment)
-                    .scaleEffect(isPressing ? 0.94 : 1)
-                    .contentTransition(.opacity)
+                if let emojiImage = EmojiImageStore.image(emojiIndex) {
+                    Image(uiImage: emojiImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(
+                            width: proxy.size.width,
+                            height: proxy.size.height,
+                            alignment: .center
+                        )
+                        .offset(y: verticalAdjustment)
+                        .scaleEffect(isPressing ? 0.94 : 1)
+                        .contentTransition(.opacity)
+                }
             }
             .contentShape(Rectangle())
             .onLongPressGesture(
@@ -85,7 +88,8 @@ struct EmojiWatchView: View {
         switchTask = Task { @MainActor in
             // 初始 0.35 秒一次，每步加快 0.025 秒，最快 0.05 秒一次（上限）。
             var interval: UInt64 = 350_000_000
-            let minimum: UInt64 = 50_000_000
+            // 最快每秒 10 张（100ms 一次），避免无限加速给 CPU / 渲染造成压力
+            let minimum: UInt64 = 100_000_000
             while !Task.isCancelled, spinActive {
                 try? await Task.sleep(nanoseconds: interval)
                 guard !Task.isCancelled, spinActive else { return }
@@ -105,9 +109,32 @@ struct EmojiWatchView: View {
         if haptic {
             WKInterfaceDevice.current().play(.click)
         }
-        withAnimation(.easeInOut(duration: haptic ? 0.2 : 0.06)) {
+        // 快速抽卡时动画只有 30ms，短于循环间隔（100ms），避免两张图交叉驻留
+        withAnimation(.easeInOut(duration: haptic ? 0.2 : 0.03)) {
             emojiIndex = next
         }
+    }
+}
+
+/// 表情图缓存：资源已压到 1024px（单张解码约 4MB），
+/// 再用内存受限的 NSCache 兜底，避免快速抽卡时多张图同时驻留触发 watchOS 内存强杀。
+private enum EmojiImageStore {
+    private static let cache: NSCache<NSNumber, UIImage> = {
+        let cache = NSCache<NSNumber, UIImage>()
+        // 最多约 6 张 1024×1024 图（RGBA ≈ 4MB/张）
+        cache.totalCostLimit = 24 * 1024 * 1024
+        return cache
+    }()
+
+    static func image(_ index: Int) -> UIImage? {
+        let key = NSNumber(value: index)
+        if let cached = cache.object(forKey: key) {
+            return cached
+        }
+        guard let image = UIImage(named: "\(index)") else { return nil }
+        let cost = Int(image.size.width * image.size.height * 4)
+        cache.setObject(image, forKey: key, cost: cost)
+        return image
     }
 }
 
