@@ -112,7 +112,7 @@ struct HomeNavigationView: View {
                             icon:
                                 "person.3.sequence.fill",
                             iconColor:
-                                    .orange
+                                    Color(red: 217 / 255, green: 112 / 255, blue: 0)
                         )
                     }
                     .buttonStyle(.plain)
@@ -152,7 +152,7 @@ struct HomeNavigationView: View {
                             icon:
                                 "paintpalette.fill",
                             iconColor:
-                                    .purple
+                                    Color(red: 15 / 255, green: 118 / 255, blue: 110 / 255)
                         )
                     }
                     .buttonStyle(.plain)
@@ -581,19 +581,29 @@ struct WorksBrowserView: View {
         ("original", "原创作品"),
         ("events", "校园活动"),
         ("sports", "体育赛事"),
-        ("music", "歌曲演唱"),
+        ("music", "音乐现场"),
         ("dance", "舞蹈表演"),
         ("news", "校园新闻"),
         ("digital", "数字创意")
     ]
 
+    /// 分享兜底：WebView 尚未加载出 URL 时使用作品站首页。
+    private var shareURL: URL {
+        URL(string: "https://shumeiartworks.coze.site")!
+    }
+
     @State private var selectedCategory = "all"
     @State private var webView: WKWebView?
+    @State private var currentURL: URL?
     @State private var navigationController: UINavigationController?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        WorksWKWebView(webView: $webView, selectedCategory: $selectedCategory)
+        WorksWKWebView(
+            webView: $webView,
+            selectedCategory: $selectedCategory,
+            currentURL: $currentURL
+        )
             .ignoresSafeArea(edges: .bottom)
             .navigationTitle("作品播放")
             .navigationBarTitleDisplayMode(.inline)
@@ -624,6 +634,11 @@ struct WorksBrowserView: View {
                         Image(systemName: "line.3.horizontal.decrease.circle")
                     }
                     .accessibilityLabel("筛选作品分类")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    ShareLink(item: currentURL ?? shareURL) {
+                        Label("分享作品站", systemImage: "square.and.arrow.up")
+                    }
                 }
             }
             .background(
@@ -678,9 +693,14 @@ private struct NavControllerAccessor: UIViewControllerRepresentable {
 private struct WorksWKWebView: UIViewRepresentable {
     @Binding var webView: WKWebView?
     @Binding var selectedCategory: String
+    @Binding var currentURL: URL?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(webView: $webView, selectedCategory: $selectedCategory)
+        Coordinator(
+            webView: $webView,
+            selectedCategory: $selectedCategory,
+            currentURL: $currentURL
+        )
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -690,6 +710,8 @@ private struct WorksWKWebView: UIViewRepresentable {
 
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
+        // 监听 URL 变化（含网页内 SPA 跳转），保证分享的始终是当前访问链接
+        context.coordinator.observeURL(of: webView)
         // 允许在网页历史里左右滑动返回（详情 ↔ 列表）
         webView.allowsBackForwardNavigationGestures = true
 
@@ -700,6 +722,7 @@ private struct WorksWKWebView: UIViewRepresentable {
 
         DispatchQueue.main.async {
             self.webView = webView
+            self.currentURL = url
         }
         return webView
     }
@@ -709,10 +732,30 @@ private struct WorksWKWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate {
         @Binding var webView: WKWebView?
         @Binding var selectedCategory: String
+        @Binding var currentURL: URL?
 
-        init(webView: Binding<WKWebView?>, selectedCategory: Binding<String>) {
+        private var urlObserver: NSKeyValueObservation?
+
+        init(
+            webView: Binding<WKWebView?>,
+            selectedCategory: Binding<String>,
+            currentURL: Binding<URL?>
+        ) {
             _webView = webView
             _selectedCategory = selectedCategory
+            _currentURL = currentURL
+        }
+
+        /// 观察 WebView 的 URL 变化（网页内部跳转也能拿到最新链接）。
+        func observeURL(of webView: WKWebView) {
+            urlObserver = webView.observe(\.url, options: [.new]) { [weak self] observedWebView, _ in
+                self?.currentURL = observedWebView.url
+            }
+        }
+
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            // 每次页面跳转都同步当前 URL，分享按钮始终拿到正在访问的链接
+            currentURL = webView.url
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
