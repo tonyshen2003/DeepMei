@@ -51,6 +51,17 @@ struct MyMemberCardView: View {
         }
         .navigationTitle("我的社员卡")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if let qrImage {
+                    ShareLink(
+                        item: Image(uiImage: qrImage),
+                        preview: SharePreview("我的社员卡识别码", image: Image(uiImage: qrImage))
+                    )
+                    .accessibilityLabel("分享识别码二维码")
+                }
+            }
+        }
     }
 
     private var content: some View {

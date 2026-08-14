@@ -42,6 +42,16 @@ struct MarkdownArticleView: View {
         }
         .navigationTitle(articleTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if case .loaded(let content) = loadState {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ShareLink(item: articleShareText(content)) {
+                        Label("分享文章", systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityLabel("分享文章")
+                }
+            }
+        }
         .task(id: fileName) { // 当 fileName 改变时自动重新重新执行 Task
             await loadMarkdownAsync()
         }
@@ -115,6 +125,11 @@ private extension MarkdownArticleView {
         default:
             return "文章"
         }
+    }
+
+    /// 分享文本：标题 + 正文（保留 Markdown 原始内容，便于对方复制存档）。
+    func articleShareText(_ content: String) -> String {
+        "\(articleTitle)\n\n\(content)"
     }
 
     // 异步加载本地文件，避免 UI 阻塞
