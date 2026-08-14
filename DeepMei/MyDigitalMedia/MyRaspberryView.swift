@@ -238,6 +238,8 @@ struct MyRaspberryView: View {
     @State private var refreshMessage: String?
     @State private var isReadingNFC = false
     @FocusState private var isFocused: Bool
+    @Namespace private var viewerNamespace
+    @State private var viewerRoute: ImageViewerRoute?
 
     private var selectedMember: RaspberryMember? {
         guard selectedIndex >= 0, selectedIndex < members.count else { return nil }
@@ -264,7 +266,11 @@ struct MyRaspberryView: View {
                     } else if let selectedMember {
                         ScrollView {
                             VStack(spacing: 20) {
-                                MemberProfileCard(member: selectedMember)
+                                MemberProfileCard(
+                                    member: selectedMember,
+                                    namespace: viewerNamespace,
+                                    viewerRoute: $viewerRoute
+                                )
                                 
                                 // 底部品牌标识
                                 Image("DigitalMedia-Line")
@@ -397,6 +403,14 @@ struct MyRaspberryView: View {
                             .padding(.bottom, 24)
                             .transition(.opacity)
                     }
+                }
+                .navigationDestination(item: $viewerRoute) { route in
+                    ImageViewer(
+                        urls: route.urls,
+                        initialIndex: route.initialIndex,
+                        sourceID: route.sourceID,
+                        namespace: viewerNamespace
+                    )
                 }
             }
     }
@@ -587,10 +601,10 @@ private struct MemberCandidateList: View {
                                 } else {
                                     ZStack {
                                         Circle()
-                                            .fill(Color.accentColor.gradient)
+                                            .fill(Color(uiColor: .secondarySystemFill))
                                         Text(String(member.name.prefix(1)))
                                             .font(.system(size: 18, weight: .bold))
-                                            .foregroundStyle(.white)
+                                            .foregroundStyle(.secondary)
                                     }
                                 }
                             }
@@ -648,13 +662,21 @@ private struct MemberCandidateList: View {
 // MARK: - 3. 社员档案卡片组件
 struct MemberProfileCard: View {
     let member: RaspberryMember
+    let namespace: Namespace.ID
+    @Binding var viewerRoute: ImageViewerRoute?
     @State private var copyFeedback: String?
+    @State private var isPreparingShare = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
             // 1. 照片轮播
             if !member.photoURLs.isEmpty {
-                PhotoCarouselView(urls: member.photoURLs)
+                PhotoCarouselView(
+                    urls: member.photoURLs,
+                    namespace: namespace,
+                    viewerRoute: $viewerRoute
+                )
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     .padding([.top, .horizontal], 16)
@@ -697,17 +719,39 @@ struct MemberProfileCard: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     
-                    Text(member.idCode)
-                        .font(.caption.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.accentColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color.accentColor.opacity(0.12))
-                        .clipShape(Capsule())
+                    HStack(spacing: 8) {
+                        Text(member.idCode)
+                            .font(.caption.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.accentColor.opacity(0.12))
+                            .clipShape(Capsule())
+
+                        Spacer(minLength: 0)
+
+                        // 分享按钮放在识别码同一行，避免挤占姓名行的显示空间
+                        Button {
+                            presentShareSheet()
+                        } label: {
+                            Group {
+                                if isPreparingShare {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: "square.and.arrow.up")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
+                        }
+                        .disabled(isPreparingShare)
+                        .accessibilityLabel("分享社员档案")
+                        .accessibilityHint("分享查询结果卡片")
+                    }
                 }
-                
-                Spacer()
             }
             .padding(16)
       
@@ -767,7 +811,11 @@ struct MemberProfileCard: View {
             if !member.works.isEmpty {
                 Divider()
                     .padding(.horizontal, 16)
-                WorkGridSection(works: member.works)
+                WorkGridSection(
+                    works: member.works,
+                    namespace: namespace,
+                    viewerRoute: $viewerRoute
+                )
             }
         }
         .background(Color(uiColor: .secondarySystemGroupedBackground))
@@ -787,6 +835,71 @@ struct MemberProfileCard: View {
         }
     }
 
+    /// 点击分享时实时渲染整卡并调起系统分享面板。
+    @MainActor
+    private func presentShareSheet() {
+        guard !isPreparingShare else { return }
+        isPreparingShare = true
+        Task {
+            await preloadShareImages()
+            let image = renderShareImage()
+            isPreparingShare = false
+            guard let image else { return }
+            presentActivitySheet(with: image)
+        }
+    }
+
+    /// 分享前把头像、封面照片预取进内存缓存，保证分享图里是真实图片。
+    @MainActor
+    private func preloadShareImages() async {
+        var urls: [String] = []
+        if let avatarURLString = member.avatarURL {
+            urls.append(avatarURLString)
+        }
+        if let firstPhoto = member.photoURLs.first {
+            urls.append(firstPhoto)
+        }
+
+        for url in urls {
+            _ = await ImageCacheManager.shared.image(for: url)
+        }
+    }
+
+    /// 渲染整张分享卡图片。
+    @MainActor
+    private func renderShareImage() -> UIImage? {
+        let card = MemberShareCardView(
+            member: member,
+            querierIdCode: LoginManager.shared.loggedInIdCode
+        )
+        // 跟随 App 当前深浅色，保证分享卡配色与软件一致
+        .environment(\.colorScheme, colorScheme)
+        .frame(width: 360)
+
+        let renderer = ImageRenderer(content: card)
+        renderer.scale = 2
+        return renderer.uiImage
+    }
+
+    private func presentActivitySheet(with image: UIImage) {
+        let activityController = UIActivityViewController(
+            activityItems: [image],
+            applicationActivities: nil
+        )
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let root = scene.windows.first?.rootViewController else { return }
+        // iPad 上以弹出层展示，需要 sourceView/sourceRect
+        activityController.popoverPresentationController?.sourceView = root.view
+        activityController.popoverPresentationController?.sourceRect = CGRect(
+            x: root.view.bounds.midX,
+            y: root.view.bounds.midY,
+            width: 0,
+            height: 0
+        )
+        activityController.popoverPresentationController?.permittedArrowDirections = []
+        root.present(activityController, animated: true)
+    }
+
     private func showCopyFeedback(_ message: String) {
         withAnimation(.easeOut(duration: 0.2)) {
             copyFeedback = message
@@ -802,12 +915,12 @@ struct MemberProfileCard: View {
     private var placeholderAvatar: some View {
         ZStack {
             Circle()
-                .fill(Color.accentColor.gradient)
+                .fill(Color(uiColor: .secondarySystemFill))
                 .frame(width: 64, height: 64)
             
             Text(String(member.name.prefix(1)))
                 .font(.system(size: 26, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
+                .foregroundColor(.secondary)
         }
     }
 }
@@ -823,7 +936,7 @@ private struct RatingBadge {
     init?(rawValue: String) {
         switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines) {
         case "社团领袖":
-            self.init(systemImage: "crown.fill", color: Color(red: 0.79, green: 0.64, blue: 0.15), accessibilityLabel: "社团领袖")
+            self.init(systemImage: "crown.fill", color: Color(red: 0.62, green: 0.50, blue: 0.12), accessibilityLabel: "社团领袖")
         case "核心社员":
             self.init(systemImage: "checkmark.seal.fill", color: Color(red: 0.58, green: 0.17, blue: 0.22), accessibilityLabel: "核心社员")
         case "活跃社员":
@@ -842,10 +955,253 @@ private struct RatingBadge {
     }
 }
 
+// MARK: - 查询结果分享卡（供 ImageRenderer 导出图片）
+
+/// 完整还原查询结果卡片：封面照片、身份区、统计、履历、代表作品，并铺满多枚查询人水印。
+private struct MemberShareCardView: View {
+    let member: RaspberryMember
+    let querierIdCode: String
+
+    /// App 品牌强调色（与 AccentColor 资产一致；ImageRenderer 下显式指定，避免回退到系统蓝）。
+    private static let brandAccent = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 1.0, green: 179 / 255.0, blue: 183 / 255.0, alpha: 1)
+            : UIColor(red: 148 / 255.0, green: 43 / 255.0, blue: 56 / 255.0, alpha: 1)
+    })
+
+    private var badge: RatingBadge? {
+        RatingBadge(rawValue: member.rating)
+    }
+
+    private var watermarkText: String {
+        querierIdCode.isEmpty ? "树莓社社员" : querierIdCode
+    }
+
+    var body: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                // 1. 照片封面（取第一张；已缓存用原图，未缓存用同款渐变占位）
+                if !member.photoURLs.isEmpty {
+                    coverPhoto
+                        .padding([.top, .horizontal], 16)
+                }
+
+                // 2. 身份头部区
+                identityHeader
+                    .padding(16)
+
+                Divider()
+                    .padding(.horizontal, 16)
+
+                // 3. 核心数据统计区
+                statsRow
+                    .padding(.vertical, 14)
+
+                // 4. 详细履历区
+                if hasDetailRows {
+                    Divider()
+                        .padding(.horizontal, 16)
+                    detailRows
+                        .padding(16)
+                }
+
+                // 5. 底部品牌标志（与查询结果页面底部一致）
+                Image("DigitalMedia-Line")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 140)
+                    .accessibilityHidden(true)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
+            }
+            .frame(width: 360)
+
+            // 多枚斜向水印铺满整卡
+            WatermarkLayer(text: "由 \(watermarkText) 查询")
+        }
+        .background(
+            Color(uiColor: .secondarySystemGroupedBackground),
+            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    // MARK: 封面
+    private var coverPhoto: some View {
+        Group {
+            if let first = member.photoURLs.first,
+               let cached = ImageCacheManager.shared.cachedImage(for: first) {
+                Image(uiImage: cached)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    LinearGradient(
+                        colors: [.indigo, .purple],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    Text(String(member.name.prefix(1)))
+                        .font(.system(size: 56, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 220)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    // MARK: 身份头部
+    private var identityHeader: some View {
+        HStack(spacing: 16) {
+            avatar
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    Text(member.name)
+                        .font(.title2.bold())
+                        .foregroundStyle(.primary)
+                    if !member.alias.isEmpty {
+                        Text("(\(member.alias))")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    if let badge {
+                        Image(systemName: badge.systemImage)
+                            .symbolRenderingMode(.monochrome)
+                            .foregroundStyle(.white)
+                            .font(.caption)
+                            .frame(width: 20, height: 20)
+                            .background(badge.color, in: Circle())
+                    }
+                }
+
+                Text("\(member.generation) \(member.clazz) · \(member.department)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Text(member.idCode)
+                    .font(.caption.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Self.brandAccent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Self.brandAccent.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: 统计
+    private var statsRow: some View {
+        HStack(spacing: 0) {
+            StatView(title: "参与活动", value: "\(member.activityCount)", unit: "次")
+            Divider().frame(height: 28)
+            StatView(title: "志愿时长", value: String(format: "%.0f", member.totalHours), unit: "h")
+            Divider().frame(height: 28)
+            StatView(title: "入社年份", value: member.joinYearFormatted, unit: "年")
+        }
+    }
+
+    // MARK: 履历
+    private var hasDetailRows: Bool {
+        !member.fullBirthdayFormatted.isEmpty
+            || !member.contactQQ.isEmpty
+            || !member.roles.isEmpty
+            || !member.honors.isEmpty
+            || !member.college.isEmpty
+            || !member.description.isEmpty
+    }
+
+    private var detailRows: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if !member.fullBirthdayFormatted.isEmpty {
+                DetailRow(icon: "birthday.cake.fill", title: "生日", content: member.fullBirthdayFormatted, tint: .pink)
+            }
+            if !member.contactQQ.isEmpty {
+                DetailRow(icon: "bubble.left.and.bubble.right.fill", title: "QQ", content: member.contactQQ, tint: .blue)
+            }
+            if !member.roles.isEmpty {
+                DetailRow(icon: "briefcase.fill", title: "社团职务", content: member.roles, tint: .orange)
+            }
+            if !member.honors.isEmpty {
+                DetailRow(icon: "star.fill", title: "荣誉/其他职务", content: member.honors, tint: .yellow)
+            }
+            if !member.college.isEmpty {
+                DetailRow(icon: "graduationcap.fill", title: "升学去向", content: member.college, tint: .green)
+            }
+            if !member.description.isEmpty {
+                DetailRow(icon: "text.quote", title: "社员简介", content: member.description, tint: .purple)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: 头像
+    private var avatar: some View {
+        Group {
+            if let avatarURLString = member.avatarURL,
+               let cached = ImageCacheManager.shared.cachedImage(for: avatarURLString) {
+                Image(uiImage: cached)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                ZStack {
+                    Circle().fill(Color(uiColor: .secondarySystemFill))
+                    Text(String(member.name.prefix(1)))
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .frame(width: 80, height: 80)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color.primary.opacity(0.1), lineWidth: 1))
+    }
+}
+
+/// 铺满整卡的多枚斜向水印，低调但可溯源。
+private struct WatermarkLayer: View {
+    let text: String
+
+    var body: some View {
+        GeometryReader { proxy in
+            let columns = max(2, Int(proxy.size.width / 150))
+            let rows = max(3, Int(proxy.size.height / 180))
+
+            VStack(spacing: 64) {
+                ForEach(0..<rows, id: \.self) { _ in
+                    HStack(spacing: 64) {
+                        ForEach(0..<columns, id: \.self) { _ in
+                            Text(text)
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .opacity(0.30)
+                                .rotationEffect(.degrees(-25))
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 struct PhotoCarouselView: View {
     let urls: [String]
+    let namespace: Namespace.ID
+    @Binding var viewerRoute: ImageViewerRoute?
     @State private var selection = 0
-    @State private var viewerPresented = false
+
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             TabView(selection: $selection) {
@@ -853,7 +1209,14 @@ struct PhotoCarouselView: View {
                     FeishuAsyncImage(urlString: url, placeholderName: "照片", contentMode: .fill)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .contentShape(Rectangle())        // 保证整个区域可点击
-                        .onTapGesture { viewerPresented = true }
+                        .matchedTransitionSource(id: "carousel-\(url)", in: namespace)
+                        .onTapGesture {
+                            viewerRoute = ImageViewerRoute(
+                                urls: urls,
+                                initialIndex: selection,
+                                sourceID: "carousel-\(urls[selection])"
+                            )
+                        }
                         .tag(index)
                 }
             }
@@ -871,21 +1234,29 @@ struct PhotoCarouselView: View {
                 .padding(10)
             }
         }
-        .fullScreenCover(isPresented: $viewerPresented) {
-            ImageViewer(urls: urls, initialIndex: selection)
-        }
     }
 }
 
-// MARK: - 全屏图片查看器（支持多图左右滑动切换）
+// MARK: - 全屏图片查看器（UIPageViewController 分页 + UIScrollView 原生缩放）
+
+/// 查看器路由：把图片列表、起始页码和 zoom 来源 ID 一起显式传入。
+struct ImageViewerRoute: Identifiable, Hashable {
+    let urls: [String]
+    let initialIndex: Int
+    let sourceID: String
+    var id: String { sourceID }
+}
 
 struct ImageViewer: View {
     let urls: [String]
+    let sourceID: String
+    let namespace: Namespace.ID
     @State private var selection: Int
-    @Environment(\.dismiss) var dismiss
 
-    init(urls: [String], initialIndex: Int = 0) {
+    init(urls: [String], initialIndex: Int = 0, sourceID: String, namespace: Namespace.ID) {
         self.urls = urls
+        self.sourceID = sourceID
+        self.namespace = namespace
         _selection = State(initialValue: min(max(initialIndex, 0), max(urls.count - 1, 0)))
     }
 
@@ -893,13 +1264,8 @@ struct ImageViewer: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            TabView(selection: $selection) {
-                ForEach(Array(urls.enumerated()), id: \.offset) { index, url in
-                    ZoomableImageView(url: url)
-                        .tag(index)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+            // 系统级分页查看器：左右滑动切换、双指缩放、放大后拖拽
+            SystemImageViewer(urls: urls, selection: $selection)
 
             // 页码指示器（多图时显示）
             if urls.count > 1 {
@@ -913,82 +1279,260 @@ struct ImageViewer: View {
                     .frame(maxHeight: .infinity, alignment: .bottom)
                     .padding(.bottom, 28)
             }
+        }
+        // 系统相册式放大进入：从点按的缩略图 zoom 到全屏查看器
+        .navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        // 相册风格：保留系统 Back + 边缘右滑返回；导航栏半透明黑，隐藏底部 TabBar
+        .toolbarBackground(.black.opacity(0.4), for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
+    }
+}
 
-            // 关闭按钮
-            VStack {
-                HStack {
-                    Spacer()
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.largeTitle)
-                            .foregroundColor(.white)
-                            .padding()
-                    }
-                    .accessibilityLabel("关闭")
-                }
-                Spacer()
+/// SwiftUI 包装：UIPageViewController（横向翻页）+ 每页 UIScrollView（原生缩放）。
+struct SystemImageViewer: UIViewControllerRepresentable {
+    let urls: [String]
+    @Binding var selection: Int
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeUIViewController(context: Context) -> UIPageViewController {
+        let pageViewController = UIPageViewController(
+            transitionStyle: .scroll,
+            navigationOrientation: .horizontal,
+            options: [.interPageSpacing: 20]
+        )
+        pageViewController.dataSource = context.coordinator
+        pageViewController.delegate = context.coordinator
+        pageViewController.view.backgroundColor = .black
+
+        let initialIndex = min(max(selection, 0), max(urls.count - 1, 0))
+        pageViewController.setViewControllers(
+            [context.coordinator.pageController(for: initialIndex)],
+            direction: .forward,
+            animated: false
+        )
+        return pageViewController
+    }
+
+    func updateUIViewController(_ pageViewController: UIPageViewController, context: Context) {
+        context.coordinator.parent = self
+        guard let current = pageViewController.viewControllers?.first as? ZoomableImagePageViewController,
+              current.index != selection else { return }
+        pageViewController.setViewControllers(
+            [context.coordinator.pageController(for: selection)],
+            direction: selection > current.index ? .forward : .reverse,
+            animated: false
+        )
+    }
+
+    final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
+        var parent: SystemImageViewer
+        private var pages: [Int: ZoomableImagePageViewController] = [:]
+
+        init(_ parent: SystemImageViewer) {
+            self.parent = parent
+        }
+
+        func pageController(for index: Int) -> UIViewController {
+            if let page = pages[index] {
+                return page
             }
+            let page = ZoomableImagePageViewController(url: parent.urls[index], index: index)
+            pages[index] = page
+            return page
+        }
+
+        func pageViewController(
+            _ pageViewController: UIPageViewController,
+            viewControllerBefore viewController: UIViewController
+        ) -> UIViewController? {
+            guard let index = (viewController as? ZoomableImagePageViewController)?.index, index > 0 else {
+                return nil
+            }
+            return pageController(for: index - 1)
+        }
+
+        func pageViewController(
+            _ pageViewController: UIPageViewController,
+            viewControllerAfter viewController: UIViewController
+        ) -> UIViewController? {
+            guard let index = (viewController as? ZoomableImagePageViewController)?.index,
+                  index < parent.urls.count - 1 else {
+                return nil
+            }
+            return pageController(for: index + 1)
+        }
+
+        func pageViewController(
+            _ pageViewController: UIPageViewController,
+            didFinishAnimating finished: Bool,
+            previousViewControllers: [UIViewController],
+            transitionCompleted completed: Bool
+        ) {
+            guard completed,
+                  let current = pageViewController.viewControllers?.first as? ZoomableImagePageViewController else {
+                return
+            }
+            parent.selection = current.index
         }
     }
 }
 
-/// 单张图片查看：黑底、双指缩放、放大后拖拽、双击放大/还原。
-private struct ZoomableImageView: View {
-    let url: String
+/// 单页图片：UIScrollView 原生缩放 / 拖拽 + 异步加载。
+final class ZoomableImagePageViewController: UIViewController, UIScrollViewDelegate {
+    let index: Int
+    private let url: String
 
-    @State private var scale: CGFloat = 1
-    @State private var lastScale: CGFloat = 1
-    @State private var offset: CGSize = .zero
-    @State private var lastOffset: CGSize = .zero
+    private let scrollView = UIScrollView()
+    private let imageView = UIImageView()
+    private let loadingView = UIActivityIndicatorView(style: .large)
+    private var imageLoaded = false
+    /// 最近一次布局尺寸：尺寸不变时不再重建布局，避免重置用户缩放状态。
+    private var lastLayoutSize: CGSize = .zero
+    /// 缩放为 1 时的图片原始展示尺寸（用于 zoom 后重新居中）。
+    private var baseImageSize: CGSize = .zero
 
-    var body: some View {
-        FeishuAsyncImage(urlString: url, placeholderName: "加载中…", contentMode: .fit)
-            .scaleEffect(scale)
-            .offset(offset)
-            // 双指缩放
-            .gesture(
-                MagnificationGesture()
-                    .onChanged { value in
-                        let delta = value / lastScale
-                        lastScale = value
-                        scale = min(max(scale * delta, 0.5), 5.0)
-                    }
-                    .onEnded { _ in
-                        lastScale = 1
-                    }
-            )
-            // 单指拖拽（仅在放大时生效）
-            .simultaneousGesture(
-                DragGesture()
-                    .onChanged { value in
-                        guard scale > 1 else { return }
-                        offset = CGSize(
-                            width: lastOffset.width + value.translation.width,
-                            height: lastOffset.height + value.translation.height
-                        )
-                    }
-                    .onEnded { _ in
-                        lastOffset = offset
-                    }
-            )
-            // 双击放大/还原
-            .onTapGesture(count: 2) {
-                withAnimation(.spring(response: 0.3)) {
-                    if scale > 1 {
-                        scale = 1
-                        offset = .zero
-                        lastOffset = .zero
-                    } else {
-                        scale = 2.5
-                    }
-                }
+    init(url: String, index: Int) {
+        self.url = url
+        self.index = index
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+
+        scrollView.frame = view.bounds
+        scrollView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        scrollView.delegate = self
+        scrollView.minimumZoomScale = 1
+        scrollView.maximumZoomScale = 5
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.bouncesZoom = true
+        view.addSubview(scrollView)
+
+        imageView.contentMode = .scaleAspectFit
+        imageView.isUserInteractionEnabled = true
+        scrollView.addSubview(imageView)
+
+        loadingView.color = .white
+        loadingView.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+        loadingView.autoresizingMask = [
+            .flexibleLeftMargin, .flexibleRightMargin,
+            .flexibleTopMargin, .flexibleBottomMargin
+        ]
+        loadingView.startAnimating()
+        view.addSubview(loadingView)
+
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
+        doubleTap.numberOfTapsRequired = 2
+        imageView.addGestureRecognizer(doubleTap)
+
+        loadImage()
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        let bounds = scrollView.bounds
+        guard bounds.width > 0, bounds.height > 0, imageLoaded, bounds.size != lastLayoutSize else { return }
+        lastLayoutSize = bounds.size
+        layoutImage()
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+        imageView
+    }
+
+    func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        centerContent(in: scrollView)
+    }
+
+    // MARK: - 图片加载
+
+    private func loadImage() {
+        Task { @MainActor in
+            let image = await ImageCacheManager.shared.image(for: url)
+            loadingView.stopAnimating()
+            loadingView.removeFromSuperview()
+            guard let image else {
+                showFailurePlaceholder()
+                return
             }
+            imageView.image = image
+            imageLoaded = true
+            layoutImage()
+            lastLayoutSize = scrollView.bounds.size
+        }
+    }
+
+    private func showFailurePlaceholder() {
+        let label = UILabel()
+        label.text = "图片加载失败"
+        label.textColor = .white.withAlphaComponent(0.7)
+        label.font = .systemFont(ofSize: 15)
+        label.sizeToFit()
+        label.center = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+        label.autoresizingMask = [
+            .flexibleLeftMargin, .flexibleRightMargin,
+            .flexibleTopMargin, .flexibleBottomMargin
+        ]
+        view.addSubview(label)
+    }
+
+    // MARK: - 布局
+
+    /// 按原始图片比例缩放到一屏内（不超过 1:1），并居中。
+    private func layoutImage() {
+        guard let image = imageView.image, scrollView.bounds.width > 0 else { return }
+        let bounds = scrollView.bounds
+        let fitScale = min(bounds.width / image.size.width, bounds.height / image.size.height, 1)
+        baseImageSize = CGSize(
+            width: image.size.width * fitScale,
+            height: image.size.height * fitScale
+        )
+        scrollView.zoomScale = 1
+        imageView.frame = CGRect(origin: .zero, size: baseImageSize)
+        scrollView.contentSize = baseImageSize
+        centerContent(in: scrollView)
+    }
+
+    /// 图片小于可视区域时居中于 bounds；放大后 contentSize 由系统维护，居中于内容区。
+    private func centerContent(in scrollView: UIScrollView) {
+        let bounds = scrollView.bounds
+        let contentSize = scrollView.contentSize
+        imageView.center = CGPoint(
+            x: contentSize.width < bounds.width ? bounds.width / 2 : contentSize.width / 2,
+            y: contentSize.height < bounds.height ? bounds.height / 2 : contentSize.height / 2
+        )
+    }
+
+    // MARK: - 手势
+
+    @objc private func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
+        if scrollView.zoomScale > 1 {
+            scrollView.setZoomScale(1, animated: true)
+            return
+        }
+        let point = gesture.location(in: imageView)
+        let targetScale: CGFloat = 2.5
+        let zoomRect = CGRect(
+            x: point.x - scrollView.bounds.width / (2 * targetScale),
+            y: point.y - scrollView.bounds.height / (2 * targetScale),
+            width: scrollView.bounds.width / targetScale,
+            height: scrollView.bounds.height / targetScale
+        )
+        scrollView.zoom(to: zoomRect, animated: true)
     }
 }
-    
-    
+
 // MARK: - 4. 辅助 UI 组件
 struct StatView: View {
     let title: String
@@ -1073,8 +1617,8 @@ struct DetailRow: View {
 // MARK: - 5. 代表作品集组件
 struct WorkGridSection: View {
     let works: [WorkItem]
-    @State private var viewerPresented = false
-    @State private var selectedIndex = 0
+    let namespace: Namespace.ID
+    @Binding var viewerRoute: ImageViewerRoute?
 
     private var supportedWorks: [WorkItem] {
         works.filter { $0.type != .unsupported && !$0.url.isEmpty }
@@ -1083,38 +1627,16 @@ struct WorkGridSection: View {
         works.count - supportedWorks.count
     }
 
-    /// 与 Android ArtWorksGridSection 一致：两两一行，避免 Lazy 网格在滚动容器里的布局歧义。
+    /// 两列等宽网格，与 Android ArtWorksGridSection 一致；宽度随容器自适应。
+    private static let gridSpacing: CGFloat = 12
+    /// 作品卡统一高度（与 Android 的 150dp 一致）。
+    private let workCardHeight: CGFloat = 150
+
+    /// 两两一行，供 Grid 按行渲染（单张作品单独走全宽分支）。
     private var rows: [[WorkItem]] {
         stride(from: 0, to: supportedWorks.count, by: 2).map { start in
             Array(supportedWorks[start..<min(start + 2, supportedWorks.count)])
         }
-    }
-
-    /// 两列布局下作品卡的最大宽度（超过后不再拉宽）。
-    private let maxCardWidth: CGFloat = 240
-    private let gridSpacing: CGFloat = 20
-
-    /// 作品卡宽度：两列各占可用宽度的一半，但不超过最大宽度。
-    /// 布局常量：页面左右边距 16×2 + 本节内边距 16×2 + 列间距 [gridSpacing]。
-    private var workCardWidth: CGFloat {
-        let screenWidth = UIScreen.main.bounds.width
-        let availableInner = screenWidth - 64
-        let columnWidth = (availableInner - gridSpacing) / 2
-        return min(columnWidth, maxCardWidth)
-    }
-
-    /// 4:3 照片比例。
-    private var workCardHeight: CGFloat {
-        workCardWidth * 3 / 4
-    }
-
-    /// 单张作品：与网格卡一致的最大宽度 + 4:3，保证任何场景宽度都被限制。
-    private var singleWorkWidth: CGFloat {
-        min(UIScreen.main.bounds.width - 64, maxCardWidth)
-    }
-
-    private var singleWorkHeight: CGFloat {
-        singleWorkWidth * 3 / 4
     }
 
     var body: some View {
@@ -1134,34 +1656,36 @@ struct WorkGridSection: View {
             }
             .padding(.top, 8)
 
-            // 作品网格：单张全宽；多张两两一行
-            if supportedWorks.count == 1 {
-                ImageWorkCard(
-                    work: supportedWorks[0],
-                    width: singleWorkWidth,
-                    height: singleWorkHeight
-                ) {
-                    selectedIndex = 0
-                    viewerPresented = true
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-            } else {
-                // 作品卡最大宽度 + 4:3 比例：避免宽屏下卡片被拉得过宽
-                VStack(spacing: gridSpacing) {
-                    ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
-                        HStack(spacing: gridSpacing) {
-                            ForEach(Array(row.enumerated()), id: \.element.id) { colIndex, work in
-                                ImageWorkCard(
-                                    work: work,
-                                    width: workCardWidth,
-                                    height: workCardHeight
-                                ) {
-                                    selectedIndex = rowIndex * 2 + colIndex
-                                    viewerPresented = true
+            // 作品网格：两列等宽；单张时跨整行，避免出现孤立的窄卡片。
+            // 注意：不用 LazyVGrid + gridCellColumns —— 该组合在网格只有单个元素时
+            // 不会跨列（实测只占半行）。按苹果文档，Grid 中把视图直接放进内容区
+            //（不包 GridRow）即可自动跨满所有列。
+            if !supportedWorks.isEmpty {
+                Grid(alignment: .leading, horizontalSpacing: Self.gridSpacing, verticalSpacing: Self.gridSpacing) {
+                    if supportedWorks.count == 1, let work = supportedWorks.first {
+                        ImageWorkCard(work: work, height: workCardHeight) {
+                            viewerRoute = ImageViewerRoute(
+                                urls: supportedWorks.map(\.url),
+                                initialIndex: 0,
+                                sourceID: "work-\(work.id)"
+                            )
+                        }
+                        .matchedTransitionSource(id: "work-\(work.id)", in: namespace)
+                    } else {
+                        ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                            GridRow {
+                                ForEach(Array(row.enumerated()), id: \.element.id) { colIndex, work in
+                                    ImageWorkCard(work: work, height: workCardHeight) {
+                                        viewerRoute = ImageViewerRoute(
+                                            urls: supportedWorks.map(\.url),
+                                            initialIndex: rowIndex * 2 + colIndex,
+                                            sourceID: "work-\(work.id)"
+                                        )
+                                    }
+                                    .matchedTransitionSource(id: "work-\(work.id)", in: namespace)
                                 }
                             }
                         }
-                        .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
                 .padding(.vertical, 8)
@@ -1181,21 +1705,18 @@ struct WorkGridSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .fullScreenCover(isPresented: $viewerPresented) {
-            ImageViewer(urls: supportedWorks.map(\.url), initialIndex: selectedIndex)
-        }
     }
 }
 
 struct ImageWorkCard: View {
     let work: WorkItem
-    let width: CGFloat
     let height: CGFloat
     let onTap: () -> Void
 
     var body: some View {
         FeishuAsyncImage(urlString: work.url, placeholderName: "作品", contentMode: .fill)
-            .frame(width: width, height: height)
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
             .background(Color(uiColor: .secondarySystemGroupedBackground))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(
