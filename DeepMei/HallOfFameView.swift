@@ -76,6 +76,7 @@ struct HallOfFameView: View {
     @State private var selectedMember: HallOfFameMember? = nil
     @State private var searchText: String = ""
     @Environment(\.dismissSearch) private var dismissSearch
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     
     let terms = [0, 1, 2, 3, 4, 5, 6, 7, 8]
     
@@ -92,10 +93,11 @@ struct HallOfFameView: View {
         }
     }
     
-    let columns = [
-        GridItem(.flexible(), spacing: 20),
-        GridItem(.flexible(), spacing: 20)
-    ]
+    /// 自适应列数：iPhone 保持两列；iPad 用更大的最小宽度，避免卡片过小。
+    private var columns: [GridItem] {
+        let minimum: CGFloat = horizontalSizeClass == .regular ? 340 : 160
+        return [GridItem(.adaptive(minimum: minimum), spacing: 20)]
+    }
     
     var body: some View {
         ScrollView {
