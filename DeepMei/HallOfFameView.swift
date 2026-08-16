@@ -93,9 +93,9 @@ struct HallOfFameView: View {
         }
     }
     
-    /// 自适应列数：iPhone 保持两列；iPad 用更大的最小宽度，避免卡片过小。
+    /// 自适应列数：iPhone 保持两列；iPad 用更紧凑的列宽（3:4 竖幅照片 240pt 起，避免单张过大）。
     private var columns: [GridItem] {
-        let minimum: CGFloat = horizontalSizeClass == .regular ? 340 : 160
+        let minimum: CGFloat = horizontalSizeClass == .regular ? 240 : 160
         return [GridItem(.adaptive(minimum: minimum), spacing: 20)]
     }
     
