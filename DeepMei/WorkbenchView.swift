@@ -63,6 +63,7 @@ struct WorkbenchView: View {
 private struct WorkbenchGrid: View {
     let activities: [ActivityItem]
     let groups: [WorkbenchGroup]
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var commonItems: [ActivityItem] {
         activities.filter { $0.common }
@@ -91,10 +92,11 @@ private struct WorkbenchGrid: View {
         return result
     }
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12)
-    ]
+    /// 自适应列数：iPhone 保持两列；iPad 用更大的最小宽度，避免卡片过小。
+    private var columns: [GridItem] {
+        let minimum: CGFloat = horizontalSizeClass == .regular ? 220 : 150
+        return [GridItem(.adaptive(minimum: minimum), spacing: 12)]
+    }
 
     var body: some View {
         ScrollView {
