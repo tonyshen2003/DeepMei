@@ -19,58 +19,50 @@ enum MainTab: Hashable {
 
 struct ContentView: View {
     @State private var selectedTab: MainTab = .home
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
+        // iPadOS 26+：TabView 自适应为可折叠侧边栏；iPhone 与旧系统保持底部标签栏
+        if #available(iOS 26.0, *) {
+            mainTabs
+                .tabViewStyle(.sidebarAdaptable)
+        } else {
+            mainTabs
+        }
+    }
+
+    private var mainTabs: some View {
         TabView(selection: $selectedTab) {
             // MARK: - 探索
-            HomeNavigationView(selectedTab: $selectedTab)
-                .tabItem {
-                    Label(
-                        "首页",
-                        systemImage: "safari.fill"
-                    )
-                }
-                .tag(MainTab.home)
+            Tab("首页", systemImage: "safari.fill", value: MainTab.home) {
+                HomeNavigationView(selectedTab: $selectedTab)
+            }
 
             // MARK: - 文章 / 章程
-            ArticleListView()
-                .tabItem {
-                    Label(
-                        "树莓文库",
-                        systemImage: "book.pages.fill"
-                    )
-                }
-                .tag(MainTab.library)
-            // MARK: - 工作台
-            WorkbenchView()
-                .tabItem {
-                    Label(
-                        "工作台",
-                        systemImage: "square.grid.2x2.fill"
-                    )
-                }
-                .tag(MainTab.activities)
-            
-            // MARK: - 树莓酱
-            MyRaspberryView()
-            .ignoresSafeArea()
-            .tabItem {
-                Label(
-                    "社员查询",
-                    systemImage: "star.fill"
-                )
+            Tab("树莓文库", systemImage: "book.pages.fill", value: MainTab.library) {
+                ArticleListView()
             }
-            .tag(MainTab.mine)
+
+            // MARK: - 工作台
+            Tab("工作台", systemImage: "square.grid.2x2.fill", value: MainTab.activities) {
+                WorkbenchView()
+            }
+
+            // MARK: - 社员查询
+            Tab("社员查询", systemImage: "star.fill", value: MainTab.mine) {
+                // 手机保持内容延伸到底部安全区；iPad 侧边栏/顶栏模式下去掉，避免内容顶到系统栏
+                if horizontalSizeClass == .compact {
+                    MyRaspberryView()
+                        .ignoresSafeArea()
+                } else {
+                    MyRaspberryView()
+                }
+            }
 
             // MARK: - 我的树莓（个人中心）
-            ProfileView()
-                .tabItem {
-                    Label(
-                        "我的树莓",
-                        systemImage: "person.circle.fill"
-                    )
-                }
-                .tag(MainTab.profile)
+            Tab("我的树莓", systemImage: "person.circle.fill", value: MainTab.profile) {
+                ProfileView()
+            }
         }
     }
 }
@@ -158,6 +150,9 @@ struct HomeNavigationView: View {
                     .buttonStyle(.plain)
                 }
                 .padding()
+                // iPad 大屏：内容上限 840pt 居中，避免卡片拉满全宽；手机宽度不足时行为不变
+                .frame(maxWidth: 840)
+                .frame(maxWidth: .infinity)
             }
             .navigationTitle("欢迎！")
             .toolbar {
