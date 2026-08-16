@@ -38,7 +38,9 @@ struct MarkdownArticleView: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 24)
-            .frame(maxWidth: .infinity, alignment: .leading) // 确保左对齐且占满页面宽度
+            // iPad 大屏阅读宽度上限：正文最长 720pt 居中，避免行长过长难读；手机宽度不足时行为不变
+            .frame(maxWidth: 720)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         .navigationTitle(articleTitle)
         .navigationBarTitleDisplayMode(.inline)
