@@ -26,6 +26,16 @@ struct ProfileView: View {
                     } label: {
                         Label("我的社员卡", systemImage: "person.text.rectangle")
                     }
+                    // 社员档案：网页版档案，用登录时保存的社员识别码拼链接（与 Android 抽屉入口一致，免二次登录）
+                    if loginManager.isLoggedIn, !loginManager.loggedInMemberCode.isEmpty {
+                        NavigationLink {
+                            WebView(url: archiveURL)
+                                .navigationTitle("社员档案")
+                                .navigationBarTitleDisplayMode(.inline)
+                        } label: {
+                            Label("社员档案", systemImage: "folder.fill")
+                        }
+                    }
                     NavigationLink {
                         CheckInView()
                     } label: {
@@ -73,6 +83,13 @@ struct ProfileView: View {
             .navigationTitle("我的树莓")
             .navigationBarTitleDisplayMode(.large)
         }
+    }
+
+    /// 社员档案网页链接：社员识别码作为查询参数（识别码为字母数字，无需转义）。
+    private var archiveURL: URL {
+        var components = URLComponents(string: "https://szzxshumei.com/raspberry-archive/")!
+        components.queryItems = [URLQueryItem(name: "member", value: loginManager.loggedInMemberCode)]
+        return components.url!
     }
 
     private var userHeader: some View {
