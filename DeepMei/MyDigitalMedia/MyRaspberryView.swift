@@ -436,21 +436,29 @@ struct MyRaspberryView: View {
         let query = searchText
         Task {
             do {
-                // 快照缓存优先（秒开、离线可用）；都返回全部精确匹配，重名时由界面给出候选列表
+                // 三级查询链路（与 Android 2.8.5 对齐）：
+                // 1. 本地快照命中 → 直接返回（秒开，日常路径）；
+                // 2. 未命中且快照过期/缺失 → 刷新 KV 全量快照（Worker /api/members/full）后再查本地；
+                // 3. 仍未命中 → 飞书实时兜底（覆盖刚登记、自动化刷新尚未生效的新社员），
+                //    保证确实查无此人时才报"未找到"，不因快照短暂陈旧而误报。
+                // 都返回全部精确匹配，重名时由界面给出候选列表。
                 let cached = await MemberSnapshotCache.shared.findMembers(query: query)
-                let results: [RaspberryMember]
-                if !cached.isEmpty {
-                    results = cached
-                    // 快照过期：先用旧数据展示，后台静默刷新
+                var results: [RaspberryMember] = cached
+                var fromSnapshot = !cached.isEmpty
+                if results.isEmpty {
                     if !(await MemberSnapshotCache.shared.isFresh()) {
-                        Task { _ = await MemberSnapshotCache.shared.refresh() }
+                        _ = await MemberSnapshotCache.shared.refresh()
+                        results = await MemberSnapshotCache.shared.findMembers(query: query)
+                        fromSnapshot = !results.isEmpty
                     }
-                } else {
-                    results = try await MemberService.shared.searchMembers(byNameOrCodeOrAlias: query)
-                    // 本地快照未命中（如刚登记的新社员）：在线查到后立即后台刷新快照，下次即可秒开
-                    if !results.isEmpty {
-                        Task { _ = await MemberSnapshotCache.shared.refresh() }
+                    if results.isEmpty {
+                        results = try await MemberService.shared.searchMembers(byNameOrCodeOrAlias: query)
+                        fromSnapshot = false
                     }
+                }
+                // 结果来自飞书实时兜底（如刚登记的新社员）：后台补刷快照，下次即可秒开
+                if !fromSnapshot && !results.isEmpty {
+                    Task { _ = await MemberSnapshotCache.shared.refresh() }
                 }
                 await MainActor.run {
                     isSearching = false
@@ -500,19 +508,26 @@ struct MyRaspberryView: View {
         serviceError = nil
         Task {
             do {
-                // 快照缓存优先（秒开/离线可用），未命中再回退飞书实时查询
+                // 三级查询链路（与 Android 2.8.5 对齐）：本地快照 → KV 全量刷新 → 飞书实时兜底
                 let cached = await MemberSnapshotCache.shared.findMemberByCard(cardId: cardId)
-                let found: RaspberryMember?
-                if let cached {
-                    found = cached
-                } else {
-                    found = try await MemberService.shared.searchByCardId(cardId: cardId)
+                var found: RaspberryMember? = cached
+                var fromSnapshot = cached != nil
+                if found == nil {
+                    if !(await MemberSnapshotCache.shared.isFresh()) {
+                        _ = await MemberSnapshotCache.shared.refresh()
+                        found = await MemberSnapshotCache.shared.findMemberByCard(cardId: cardId)
+                        fromSnapshot = found != nil
+                    }
+                    if found == nil {
+                        found = try await MemberService.shared.searchByCardId(cardId: cardId)
+                        fromSnapshot = false
+                    }
                 }
                 await MainActor.run {
                     isSearching = false
                     if let found {
-                        if cached == nil {
-                            // 新卡在线命中后后台刷新快照，下次即可秒开
+                        // 结果来自飞书实时兜底（如刚登记的新卡）：后台补刷快照，下次即可秒开
+                        if !fromSnapshot {
                             Task { _ = await MemberSnapshotCache.shared.refresh() }
                         }
                         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
@@ -1619,6 +1634,7 @@ struct WorkGridSection: View {
     let works: [WorkItem]
     let namespace: Namespace.ID
     @Binding var viewerRoute: ImageViewerRoute?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var supportedWorks: [WorkItem] {
         works.filter { $0.type != .unsupported && !$0.url.isEmpty }
@@ -1632,11 +1648,10 @@ struct WorkGridSection: View {
     /// 作品卡统一高度（与 Android 的 150dp 一致）。
     private let workCardHeight: CGFloat = 150
 
-    /// 两两一行，供 Grid 按行渲染（单张作品单独走全宽分支）。
-    private var rows: [[WorkItem]] {
-        stride(from: 0, to: supportedWorks.count, by: 2).map { start in
-            Array(supportedWorks[start..<min(start + 2, supportedWorks.count)])
-        }
+    /// 自适应列数：iPhone 两列；iPad 用更大的最小宽度，避免卡片过小。
+    private var gridColumns: [GridItem] {
+        let minimum: CGFloat = horizontalSizeClass == .regular ? 220 : 150
+        return [GridItem(.adaptive(minimum: minimum), spacing: Self.gridSpacing)]
     }
 
     var body: some View {
@@ -1656,13 +1671,11 @@ struct WorkGridSection: View {
             }
             .padding(.top, 8)
 
-            // 作品网格：两列等宽；单张时跨整行，避免出现孤立的窄卡片。
-            // 注意：不用 LazyVGrid + gridCellColumns —— 该组合在网格只有单个元素时
-            // 不会跨列（实测只占半行）。按苹果文档，Grid 中把视图直接放进内容区
-            //（不包 GridRow）即可自动跨满所有列。
+            // 作品网格：单张直接全宽；多张用自适应列数（iPhone 两列，iPad 自动增多）。
             if !supportedWorks.isEmpty {
-                Grid(alignment: .leading, horizontalSpacing: Self.gridSpacing, verticalSpacing: Self.gridSpacing) {
+                Group {
                     if supportedWorks.count == 1, let work = supportedWorks.first {
+                        // 单张作品跨满整行，避免出现孤立的窄卡片
                         ImageWorkCard(work: work, height: workCardHeight) {
                             viewerRoute = ImageViewerRoute(
                                 urls: supportedWorks.map(\.url),
@@ -1672,18 +1685,19 @@ struct WorkGridSection: View {
                         }
                         .matchedTransitionSource(id: "work-\(work.id)", in: namespace)
                     } else {
-                        ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
-                            GridRow {
-                                ForEach(Array(row.enumerated()), id: \.element.id) { colIndex, work in
-                                    ImageWorkCard(work: work, height: workCardHeight) {
-                                        viewerRoute = ImageViewerRoute(
-                                            urls: supportedWorks.map(\.url),
-                                            initialIndex: rowIndex * 2 + colIndex,
-                                            sourceID: "work-\(work.id)"
-                                        )
-                                    }
-                                    .matchedTransitionSource(id: "work-\(work.id)", in: namespace)
+                        LazyVGrid(
+                            columns: gridColumns,
+                            spacing: Self.gridSpacing
+                        ) {
+                            ForEach(Array(supportedWorks.enumerated()), id: \.element.id) { index, work in
+                                ImageWorkCard(work: work, height: workCardHeight) {
+                                    viewerRoute = ImageViewerRoute(
+                                        urls: supportedWorks.map(\.url),
+                                        initialIndex: index,
+                                        sourceID: "work-\(work.id)"
+                                    )
                                 }
+                                .matchedTransitionSource(id: "work-\(work.id)", in: namespace)
                             }
                         }
                     }
