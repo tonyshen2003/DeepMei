@@ -479,7 +479,7 @@ actor MemberService {
                 college: text("升学去向"),
                 joinDate: finalJoinDate, // ✅ 完美：现在传入的是真正的 Date 对象
                 activityCount: fields["参与活动次数"]?.intValue ?? 0,
-                totalHours: fields["统计时长 (社团活动记录表)"]?.doubleValue ?? 0,
+                activityHours: fields["参与活动时长"]?.doubleValue ?? 0,
                 description: text("详细介绍"),
                 photoURLs: fields["个人照片"]?.imageURLs ?? [],
                 avatarURLs: fields["头像"]?.imageURLs ?? [],

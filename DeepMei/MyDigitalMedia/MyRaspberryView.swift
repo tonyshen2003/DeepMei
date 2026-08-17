@@ -62,7 +62,7 @@ struct RaspberryMember: Identifiable, Equatable, Decodable {
     let joinDate: Date          // 入社日期 (解析 13 位时间戳)
 
     let activityCount: Int      // 参与活动次数
-    let totalHours: Double      // 统计时长
+    let activityHours: Double   // 参与活动时长
     let description: String     // 详细介绍
     let photoURLs: [String]     // 个人照片 URL 列表
     let avatarURLs: [String]    // 头像 URL 列表（飞书「头像」字段，Android 同款）
@@ -119,7 +119,7 @@ extension RaspberryMember {
         case college = "升学去向"
         case joinDate = "入社日期"
         case activityCount = "参与活动次数"
-        case totalHours = "统计时长 (社团活动记录表)"
+        case activityHours = "参与活动时长"
         case description = "详细介绍"
         case avatarList = "个人照片"
         case avatar = "头像"
@@ -141,7 +141,7 @@ extension RaspberryMember {
         rating = try container.decodeIfPresent(String.self, forKey: .rating) ?? ""
         college = try container.decodeIfPresent(String.self, forKey: .college) ?? ""
         activityCount = try container.decodeIfPresent(Int.self, forKey: .activityCount) ?? 0
-        totalHours = try container.decodeIfPresent(Double.self, forKey: .totalHours) ?? 0.0
+        activityHours = try container.decodeIfPresent(Double.self, forKey: .activityHours) ?? 0.0
         description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
 
         // 1. 处理数组字段：社团部门 ( ["摄影部"] -> "摄影部" )
@@ -777,7 +777,7 @@ struct MemberProfileCard: View {
             HStack(spacing: 0) {
                 StatView(title: "参与活动", value: "\(member.activityCount)", unit: "次")
                 Divider().frame(height: 28)
-                StatView(title: "志愿时长", value: String(format: "%.0f", member.totalHours), unit: "h")
+                StatView(title: "参与时长", value: String(format: "%.0f", member.activityHours), unit: "h")
                 Divider().frame(height: 28)
                 StatView(title: "入社年份", value: member.joinYearFormatted, unit: "年")
             }
@@ -1119,7 +1119,7 @@ private struct MemberShareCardView: View {
         HStack(spacing: 0) {
             StatView(title: "参与活动", value: "\(member.activityCount)", unit: "次")
             Divider().frame(height: 28)
-            StatView(title: "志愿时长", value: String(format: "%.0f", member.totalHours), unit: "h")
+            StatView(title: "参与时长", value: String(format: "%.0f", member.activityHours), unit: "h")
             Divider().frame(height: 28)
             StatView(title: "入社年份", value: member.joinYearFormatted, unit: "年")
         }
