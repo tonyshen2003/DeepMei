@@ -85,10 +85,14 @@ struct ProfileView: View {
         }
     }
 
-    /// 社员档案网页链接：社员识别码作为查询参数（识别码为字母数字，无需转义）。
+    /// 社员档案网页链接：社员识别码作为查询参数（识别码为字母数字，无需转义），
+    /// 附带时间戳 `t` 强制刷新，避免 WebView/站点缓存展示旧档案（与作品站、文创入口一致）。
     private var archiveURL: URL {
         var components = URLComponents(string: "https://szzxshumei.com/raspberry-archive/")!
-        components.queryItems = [URLQueryItem(name: "member", value: loginManager.loggedInMemberCode)]
+        components.queryItems = [
+            URLQueryItem(name: "member", value: loginManager.loggedInMemberCode),
+            URLQueryItem(name: "t", value: String(Date().timeIntervalSince1970)),
+        ]
         return components.url!
     }
 
