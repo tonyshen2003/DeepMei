@@ -235,14 +235,18 @@ actor MemberService {
         let token = try await getTenantAccessToken()
         
         // ⚡️ 多维度服务端精准 Filter
+        // 别名（如 "Skyler/坤希"）允许按任一子别名命中：飞书 `=` 是精确相等，
+        // 无法匹配分隔后的单个别名，故对别名额外叠加 Find 子串匹配（忽略大小写）。
+        let safe = trimmed.replacingOccurrences(of: "\"", with: "\\\"")
         let filterFormula = """
         OR(
-            CurrentValue.[姓名] = "\(trimmed)",
-            CurrentValue.[别名] = "\(trimmed)",
-            CurrentValue.[社员编号] = "\(trimmed)",
-            CurrentValue.[社员识别码] = "\(trimmed)",
-            CurrentValue.[社员身份编码（认读码）] = "\(trimmed)",
-            CurrentValue.[社员序号] = "\(trimmed)"
+            CurrentValue.[姓名] = "\(safe)",
+            CurrentValue.[别名] = "\(safe)",
+            Find(Lower("\(safe)"), Lower(CurrentValue.[别名])) > 0,
+            CurrentValue.[社员编号] = "\(safe)",
+            CurrentValue.[社员识别码] = "\(safe)",
+            CurrentValue.[社员身份编码（认读码）] = "\(safe)",
+            CurrentValue.[社员序号] = "\(safe)"
         )
         """
         
@@ -584,7 +588,7 @@ actor MemberSnapshotCache {
         ]
         let matchedItems = stored.snapshot.items.filter { item in
             keys.contains { key in
-                item.fields[key]?.flattenedText == q
+                Self.fieldMatches(fields: item.fields, key: key, query: q)
             }
         }
 
@@ -598,6 +602,26 @@ actor MemberSnapshotCache {
             }
         }
         return members
+    }
+
+    /// 字段值是否命中查询词。
+    /// 多别名/多值字段（如别名 "Skyler/坤希"）按 `/`、`、`、`;`、`，`、`；` 及空白
+    /// 拆分为多个 token，任一 token 与查询词（忽略大小写与首尾空格）相等即视为命中。
+    /// 单值字段无分隔符，退化为精确相等，不影响原有语义。
+    private static func fieldMatches(fields: [String: LarkValue], key: String, query q: String) -> Bool {
+        let qt = q.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !qt.isEmpty else { return false }
+        return fieldTokens(fields: fields, key: key).contains { $0.lowercased() == qt }
+    }
+
+    private static func fieldTokens(fields: [String: LarkValue], key: String) -> [String] {
+        let raw = (fields[key]?.flattenedText ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return [] }
+        let separators = CharacterSet(charactersIn: "/、,；;，\t\n")
+        return raw.components(separatedBy: separators)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     /// 单条精确查找（取第一条）。

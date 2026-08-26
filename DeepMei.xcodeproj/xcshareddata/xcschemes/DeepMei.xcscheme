@@ -17,6 +17,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "BBC083C3301175F700477523"
                BuildableName = "DeepMei.app"
+               BlueprintName = "DeepMei"
                ReferencedContainer = "container:DeepMei.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -46,6 +47,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BBC083C3301175F700477523"
             BuildableName = "DeepMei.app"
+            BlueprintName = "DeepMei"
             ReferencedContainer = "container:DeepMei.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -62,6 +64,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BBC083C3301175F700477523"
             BuildableName = "DeepMei.app"
+            BlueprintName = "DeepMei"
             ReferencedContainer = "container:DeepMei.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
