@@ -148,6 +148,20 @@ struct HomeNavigationView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    NavigationLink {
+                        ActivityArchiveListView()
+                    } label: {
+                        ActionCard(
+                            title: "活动记录",
+                            subtitle:
+                                "往期活动与照片档案",
+                            icon:
+                                "calendar.badge.clock",
+                            iconColor:
+                                    .indigo
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding()
                 // iPad 大屏：内容上限 840pt 居中，避免卡片拉满全宽；手机宽度不足时行为不变
