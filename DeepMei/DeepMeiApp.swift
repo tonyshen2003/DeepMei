@@ -13,7 +13,7 @@ struct DeepMeiApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AppRootView()
                 .task {
                     // 把手机端当前登录态同步给 Apple Watch
                     WatchSessionManager.shared.syncLoginState()
@@ -39,6 +39,30 @@ struct DeepMeiApp: App {
                         WatchSessionManager.shared.syncLoginState()
                     }
                 }
+        }
+    }
+}
+
+/// 根门禁：未登录时整屏只显示登录页；登录成功后由 LoginManager 状态自动切回主界面。
+/// （只做“挡在最前面”这一件事，不改变各页面原有的登录提示逻辑。）
+struct AppRootView: View {
+    @ObservedObject private var loginManager = LoginManager.shared
+
+    var body: some View {
+        if loginManager.isLoggedIn {
+            ContentView()
+        } else {
+            LoginGateView()
+        }
+    }
+}
+
+/// 登录门：把现有登录表单放在 NavigationStack 根（没有可返回的上一页），
+/// 登录成功置位 isLoggedIn 后，AppRootView 会自动替换为主界面。
+struct LoginGateView: View {
+    var body: some View {
+        NavigationStack {
+            LoginView()
         }
     }
 }
