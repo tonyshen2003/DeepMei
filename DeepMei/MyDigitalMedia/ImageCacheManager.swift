@@ -52,6 +52,7 @@ final class ImageCacheManager {
 
     private init() {
         memory.countLimit = 300
+        memory.totalCostLimit = 80 * 1024 * 1024
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
         diskDirectory = caches.appendingPathComponent("DeepMeiImageCache", isDirectory: true)
@@ -72,7 +73,7 @@ final class ImageCacheManager {
         }
 
         if let data = await readDiskData(key: key), let image = UIImage(data: data) {
-            memory.setObject(image, forKey: key as NSString)
+            memory.setObject(image, forKey: key as NSString, cost: image.pixelCost)
             return image
         }
 
@@ -82,10 +83,20 @@ final class ImageCacheManager {
 
         let task = Task { [weak self] () -> UIImage? in
             guard let self else { return nil }
-            guard let image = try? await MemberService.shared.downloadTempMedia(from: urlString) else {
+            // 活动照片墙会同时发起很多张小图；上游对高并发不稳定（实测 20 并发会出现 502），
+            // 这里全局限制同时下载数，失败的个别图再由调用方重试。
+            await ImageDownloadGate.shared.acquire()
+            let image: UIImage?
+            do {
+                image = try await MemberService.shared.downloadTempMedia(from: urlString)
+            } catch {
+                image = nil
+            }
+            await ImageDownloadGate.shared.release()
+            guard let image else {
                 return nil
             }
-            self.memory.setObject(image, forKey: key as NSString)
+            self.memory.setObject(image, forKey: key as NSString, cost: image.pixelCost)
             await self.writeDisk(image: image, key: key)
             return image
         }
@@ -157,5 +168,40 @@ final class ImageCacheManager {
             count -= 1
             size -= fileSize
         }
+    }
+}
+
+/// 全局图片下载并发闸：限制同一时刻的网络请求数，避免详情照片墙把上游顶出 502。
+private actor ImageDownloadGate {
+    static let shared = ImageDownloadGate()
+
+    private let maxConcurrent = 4
+    private var running = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func acquire() async {
+        if running < maxConcurrent {
+            running += 1
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func release() {
+        running -= 1
+        if !waiters.isEmpty {
+            let next = waiters.removeFirst()
+            running += 1
+            next.resume()
+        }
+    }
+}
+
+private extension UIImage {
+    /// 估算一张图解码后占用的字节数，作为 NSCache 的 cost（RGBA 每像素 4 字节）。
+    var pixelCost: Int {
+        max(1, Int(size.width * size.height * 4))
     }
 }
