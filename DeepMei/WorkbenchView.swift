@@ -25,23 +25,31 @@ struct WorkbenchView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if isLoading {
-                    VStack(spacing: 12) {
-                        ProgressView()
-                        Text("正在加载工作台…")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+            ScrollView {
+                VStack(spacing: 12) {
+                    // 固定入口：不受飞书工作台配置影响，始终展示在动态网格之前。
+                    MemberProofEntryCard()
+
+                    if isLoading {
+                        HStack(spacing: 12) {
+                            ProgressView()
+                            Text("正在加载工作台…")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 24)
+                    } else if let activities, activities.isEmpty {
+                        ContentUnavailableView(
+                            "暂无内容",
+                            systemImage: "square.grid.2x2",
+                            description: Text("请在飞书多维表格中添加入口")
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 320)
+                    } else if let activities {
+                        WorkbenchGrid(activities: activities, groups: groups)
                     }
-                } else if let activities, activities.isEmpty {
-                    ContentUnavailableView(
-                        "暂无内容",
-                        systemImage: "square.grid.2x2",
-                        description: Text("请在飞书多维表格中添加入口")
-                    )
-                } else if let activities {
-                    WorkbenchGrid(activities: activities, groups: groups)
                 }
+                .padding(16)
             }
             .navigationTitle("工作台")
             .navigationBarTitleDisplayMode(.large)
@@ -99,29 +107,26 @@ private struct WorkbenchGrid: View {
     }
 
     var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 12) {
-                if !commonItems.isEmpty {
-                    Section {
-                        ForEach(commonItems) { item in
-                            EntryCard(item: item, common: true, groups: groups)
-                        }
-                    } header: {
-                        SectionHeaderView("常用")
+        LazyVGrid(columns: columns, spacing: 12) {
+            if !commonItems.isEmpty {
+                Section {
+                    ForEach(commonItems) { item in
+                        EntryCard(item: item, common: true, groups: groups)
                     }
-                }
-
-                ForEach(grouped, id: \.0) { group, items in
-                    Section {
-                        ForEach(items) { item in
-                            EntryCard(item: item, common: false, groups: groups)
-                        }
-                    } header: {
-                        SectionHeaderView(group.name)
-                    }
+                } header: {
+                    SectionHeaderView("常用")
                 }
             }
-            .padding(16)
+
+            ForEach(grouped, id: \.0) { group, items in
+                Section {
+                    ForEach(items) { item in
+                        EntryCard(item: item, common: false, groups: groups)
+                    }
+                } header: {
+                    SectionHeaderView(group.name)
+                }
+            }
         }
     }
 }
@@ -143,6 +148,72 @@ private struct SectionHeaderView: View {
             Spacer()
         }
         .padding(.vertical, 6)
+    }
+}
+
+// MARK: - 固定入口：社员证明
+
+/// 工作台顶部固定卡片：独立于飞书动态入口，始终排在网格之前。
+/// 采用 App Store Today 式的通栏特色卡：社员证明的跨端紫色语义 + 白字 + 大图标，
+/// 与下方毛玻璃小网格卡片形成明显层级。
+private struct MemberProofEntryCard: View {
+    var body: some View {
+        NavigationLink {
+            MemberProofsView()
+        } label: {
+            ZStack {
+                // 背景渐变 + 右下角大面积 SF Symbol 水印，制造「特色内容卡」的视觉重心
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 91 / 255, green: 33 / 255, blue: 182 / 255), // #5B21B6
+                                Color(red: 109 / 255, green: 40 / 255, blue: 217 / 255)  // #6D28D9
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
+                Image(systemName: "doc.text.fill")
+                    .font(.system(size: 96, weight: .black))
+                    .foregroundStyle(.white.opacity(0.07))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .padding(.trailing, 4)
+                    .padding(.bottom, -12)
+
+                HStack(spacing: 14) {
+                    Image(systemName: "doc.text.fill")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 52, height: 52)
+                        .background(.white.opacity(0.18), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("社员证明")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(.white)
+                        Text("入社以来的学期盖章证明（PDF）")
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.85))
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.right")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                }
+                .padding(18)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 104)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
     }
 }
 
